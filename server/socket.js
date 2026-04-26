@@ -46,6 +46,17 @@ function broadcastSync(io) {
   io.emit("sync", getProjectedState());
 }
 
+function resetPlayback(io, videoName) {
+  state.currentTime = 0;
+  state.isPlaying = false;
+  state.lastUpdateTimestamp = now();
+  io.emit("videoChanged", {
+    name: videoName,
+    timestamp: state.lastUpdateTimestamp
+  });
+  broadcastSync(io);
+}
+
 function configureSocket(io) {
   io.on("connection", (socket) => {
     socket.emit("sync", getProjectedState());
@@ -78,5 +89,6 @@ function configureSocket(io) {
 }
 
 module.exports = {
-  configureSocket
+  configureSocket,
+  resetPlayback
 };

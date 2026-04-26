@@ -3,6 +3,8 @@
   const SEEK_DEBOUNCE_MS = 300;
 
   const player = document.getElementById("player");
+  const currentVideoName = document.getElementById("currentVideoName");
+  const videoSelect = document.getElementById("videoSelect");
   const connectionStatus = document.getElementById("connectionStatus");
   const syncStatus = document.getElementById("syncStatus");
   const socket = io();
@@ -18,6 +20,80 @@
 
   function setSyncStatus(message) {
     syncStatus.textContent = message;
+  }
+
+  function setCurrentVideo(name) {
+    currentVideoName.textContent = name || "No video selected";
+  }
+
+  function updateVideoSource(timestamp) {
+    applyingRemoteSync = true;
+    player.pause();
+    player.src = `/video?v=${timestamp || Date.now()}`;
+    player.load();
+    lastSync = { time: 0, isPlaying: false, timestamp: timestamp || Date.now() };
+    window.setTimeout(() => {
+      applyingRemoteSync = false;
+    }, 100);
+  }
+
+  async function loadVideoList() {
+    const response = await fetch("/videos");
+
+    if (!response.ok) {
+      throw new Error("Could not load videos");
+    }
+
+    const result = await response.json();
+    videoSelect.replaceChildren();
+
+    if (!result.files.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No videos found";
+      videoSelect.appendChild(option);
+      videoSelect.disabled = true;
+      setCurrentVideo(null);
+      return;
+    }
+
+    videoSelect.disabled = false;
+    result.files.forEach((file) => {
+      const option = document.createElement("option");
+      option.value = file;
+      option.textContent = file;
+      videoSelect.appendChild(option);
+    });
+
+    videoSelect.value = result.active || result.files[0];
+    setCurrentVideo(videoSelect.value);
+    updateVideoSource(Date.now());
+  }
+
+  async function selectVideo(name) {
+    if (!name) {
+      return;
+    }
+
+    setSyncStatus("Loading video...");
+
+    const response = await fetch("/videos/active", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Could not select video");
+    }
+
+    const result = await response.json();
+    videoSelect.value = result.active;
+    setCurrentVideo(result.active);
+    setSyncStatus(`Loaded ${result.active}`);
   }
 
   function emitAction(eventName) {
@@ -88,6 +164,29 @@
   });
 
   socket.on("sync", applySync);
+
+  socket.on("videoChanged", (payload) => {
+    const name = payload && payload.name;
+    const timestamp = payload && payload.timestamp;
+
+    if (name) {
+      videoSelect.value = name;
+      setCurrentVideo(name);
+    }
+
+    updateVideoSource(timestamp);
+    setSyncStatus("Video loaded");
+  });
+
+  videoSelect.addEventListener("change", () => {
+    selectVideo(videoSelect.value).catch((error) => {
+      setSyncStatus(error.message);
+    });
+  });
+
+  loadVideoList().catch((error) => {
+    setSyncStatus(error.message);
+  });
 
   player.addEventListener("play", () => {
     emitAction("play");

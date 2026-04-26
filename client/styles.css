@@ -33,21 +33,55 @@ body {
   padding: 28px 32px 18px;
 }
 
-.eyebrow {
-  margin: 0 0 6px;
-  color: #a9b0ba;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
+.current-video {
+  max-width: min(52vw, 760px);
+  margin: 0;
+  overflow: hidden;
+  color: #fffdf8;
+  font-size: 28px;
+  font-weight: 750;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-h1 {
-  margin: 0;
-  color: #fffdf8;
-  font-size: 32px;
-  font-weight: 750;
-  line-height: 1;
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.select-label {
+  color: #a9b0ba;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.video-select {
+  width: min(30vw, 360px);
+  min-height: 34px;
+  padding: 7px 34px 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f7f4ec;
+  font: inherit;
+  font-size: 13px;
+}
+
+.video-select:focus {
+  border-color: rgba(247, 244, 236, 0.55);
+}
+
+.video-select:disabled {
+  color: #77808c;
+}
+
+.video-select option {
+  background: #1b1d21;
+  color: #f7f4ec;
 }
 
 .status-cluster {
@@ -129,12 +163,21 @@ video {
     padding: 20px 16px 14px;
   }
 
-  h1 {
-    font-size: 27px;
-  }
-
   .status-cluster {
     justify-content: flex-start;
+  }
+
+  .top-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .current-video {
+    max-width: 100%;
+  }
+
+  .video-select {
+    width: calc(100vw - 32px);
   }
 
   .player-area {

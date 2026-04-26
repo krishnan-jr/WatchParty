@@ -10,12 +10,17 @@
     <main class="app-shell">
       <header class="top-bar">
         <div>
-          <p class="eyebrow">Local watch party</p>
-          <h1>Watch Party</h1>
+          <h1 class="current-video" id="currentVideoName">No video selected</h1>
         </div>
-        <div class="status-cluster" aria-live="polite">
-          <span class="status-pill" id="connectionStatus">Connecting...</span>
-          <span class="status-pill muted" id="syncStatus">Waiting for sync</span>
+        <div class="top-actions">
+          <label class="select-label" for="videoSelect">Video</label>
+          <select class="video-select" id="videoSelect">
+            <option value="">No videos found</option>
+          </select>
+          <div class="status-cluster" aria-live="polite">
+            <span class="status-pill" id="connectionStatus">Connecting...</span>
+            <span class="status-pill muted" id="syncStatus">Waiting for sync</span>
+          </div>
         </div>
       </header>
 
