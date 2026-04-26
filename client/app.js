@@ -5,6 +5,7 @@
   const player = document.getElementById("player");
   const currentVideoName = document.getElementById("currentVideoName");
   const videoSelect = document.getElementById("videoSelect");
+  const shareLink = document.getElementById("shareLink");
   const connectionStatus = document.getElementById("connectionStatus");
   const syncStatus = document.getElementById("syncStatus");
   const clientsPanel = document.getElementById("clientsPanel");
@@ -92,6 +93,22 @@
     videoSelect.value = result.active || result.files[0];
     setCurrentVideo(videoSelect.value);
     updateVideoSource(Date.now());
+  }
+
+  async function loadShareLink() {
+    const response = await fetch("/tunnel");
+
+    if (!response.ok) {
+      return;
+    }
+
+    const result = await response.json();
+    if (!result.url) {
+      return;
+    }
+
+    shareLink.href = result.url;
+    shareLink.classList.add("is-visible");
   }
 
   async function selectVideo(name) {
@@ -220,6 +237,8 @@
   loadVideoList().catch((error) => {
     setSyncStatus(error.message);
   });
+
+  loadShareLink().catch(() => {});
 
   player.addEventListener("play", () => {
     emitAction("play");

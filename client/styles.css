@@ -98,6 +98,30 @@ body {
   gap: 8px;
 }
 
+.share-link {
+  display: none;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: #f7f4ec;
+  color: #101113;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.share-link.is-visible {
+  display: inline-flex;
+}
+
+.share-link:hover {
+  background: #ffffff;
+}
+
 .status-pill {
   display: inline-flex;
   min-height: 32px;

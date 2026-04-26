@@ -18,6 +18,22 @@ app.use(express.static(CLIENT_DIR));
 app.get("/videos", getVideos);
 app.put("/videos/active", (req, res) => selectVideo(req, res, (name) => resetPlayback(io, name)));
 app.get("/video", streamVideo);
+app.get("/tunnel", async (req, res) => {
+  try {
+    const response = await fetch("http://127.0.0.1:4040/api/tunnels");
+    const data = await response.json();
+    const tunnel = data.tunnels.find((item) => item.proto === "https");
+
+    if (!tunnel) {
+      res.status(404).json({ url: null });
+      return;
+    }
+
+    res.json({ url: tunnel.public_url });
+  } catch (error) {
+    res.status(404).json({ url: null });
+  }
+});
 
 configureSocket(io);
 
