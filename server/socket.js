@@ -6,8 +6,42 @@ const state = {
   lastUpdateTimestamp: Date.now()
 };
 
+const clients = new Map();
+
 function now() {
   return Date.now();
+}
+
+function getDeviceName(userAgent) {
+  const agent = userAgent || "";
+  const isMobile = /Mobile|Android|iPhone|iPad/i.test(agent);
+  const device = isMobile ? "Mobile" : "Desktop";
+
+  if (/Edg\//.test(agent)) {
+    return `Edge ${device}`;
+  }
+
+  if (/Chrome\//.test(agent)) {
+    return `Chrome ${device}`;
+  }
+
+  if (/Firefox\//.test(agent)) {
+    return `Firefox ${device}`;
+  }
+
+  if (/Safari\//.test(agent)) {
+    return `Safari ${device}`;
+  }
+
+  return device;
+}
+
+function getClientList() {
+  return Array.from(clients.values());
+}
+
+function broadcastClients(io) {
+  io.emit("clients", getClientList());
 }
 
 function getProjectedState() {
@@ -59,7 +93,14 @@ function resetPlayback(io, videoName) {
 
 function configureSocket(io) {
   io.on("connection", (socket) => {
+    clients.set(socket.id, {
+      id: socket.id,
+      name: getDeviceName(socket.handshake.headers["user-agent"])
+    });
+
     socket.emit("sync", getProjectedState());
+    socket.emit("clients", getClientList());
+    broadcastClients(io);
 
     socket.on("play", (payload) => {
       if (applyAction("play", payload)) {
@@ -77,6 +118,11 @@ function configureSocket(io) {
       if (applyAction(state.isPlaying ? "play" : "pause", payload)) {
         broadcastSync(io);
       }
+    });
+
+    socket.on("disconnect", () => {
+      clients.delete(socket.id);
+      broadcastClients(io);
     });
   });
 

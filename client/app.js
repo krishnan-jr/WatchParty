@@ -7,6 +7,10 @@
   const videoSelect = document.getElementById("videoSelect");
   const connectionStatus = document.getElementById("connectionStatus");
   const syncStatus = document.getElementById("syncStatus");
+  const clientsPanel = document.getElementById("clientsPanel");
+  const clientsToggle = document.getElementById("clientsToggle");
+  const clientCount = document.getElementById("clientCount");
+  const clientList = document.getElementById("clientList");
   const socket = io();
 
   let applyingRemoteSync = false;
@@ -24,6 +28,26 @@
 
   function setCurrentVideo(name) {
     currentVideoName.textContent = name || "No video selected";
+  }
+
+  function renderClients(clients) {
+    clientList.replaceChildren();
+    clientCount.textContent = String(clients.length);
+
+    clients.forEach((client) => {
+      const item = document.createElement("li");
+      item.className = "client-item";
+
+      const indicator = document.createElement("span");
+      indicator.className = "client-indicator";
+
+      const name = document.createElement("span");
+      name.className = "client-name";
+      name.textContent = client.name;
+
+      item.append(indicator, name);
+      clientList.appendChild(item);
+    });
   }
 
   function updateVideoSource(timestamp) {
@@ -164,6 +188,15 @@
   });
 
   socket.on("sync", applySync);
+
+  socket.on("clients", (clients) => {
+    renderClients(Array.isArray(clients) ? clients : []);
+  });
+
+  clientsToggle.addEventListener("click", () => {
+    const isOpen = clientsPanel.classList.toggle("is-open");
+    clientsToggle.setAttribute("aria-expanded", String(isOpen));
+  });
 
   socket.on("videoChanged", (payload) => {
     const name = payload && payload.name;

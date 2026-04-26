@@ -11,9 +11,14 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 34%),
     #101113;
@@ -21,6 +26,8 @@ body {
 
 .app-shell {
   display: flex;
+  width: 100%;
+  overflow-x: hidden;
   min-height: 100vh;
   flex-direction: column;
 }
@@ -155,6 +162,90 @@ video {
   background: #000;
 }
 
+.clients-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 10;
+  width: min(260px, calc(100vw - 48px));
+}
+
+.clients-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  background: rgba(22, 24, 28, 0.88);
+  color: #f7f4ec;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.clients-toggle:hover {
+  background: rgba(28, 30, 35, 0.94);
+}
+
+.client-count {
+  display: inline-flex;
+  min-width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c7cdd6;
+  font-size: 12px;
+}
+
+.client-list {
+  display: none;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  background: rgba(22, 24, 28, 0.92);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+  list-style: none;
+}
+
+.clients-panel.is-open .client-list {
+  display: grid;
+}
+
+.client-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #c7cdd6;
+  font-size: 13px;
+}
+
+.client-indicator {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #62d28f;
+}
+
+.client-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .top-bar {
     align-items: flex-start;
@@ -168,16 +259,27 @@ video {
   }
 
   .top-actions {
+    width: 100%;
     align-items: flex-start;
     flex-direction: column;
   }
 
   .current-video {
     max-width: 100%;
+    overflow: visible;
+    font-size: 26px;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .video-select {
-    width: calc(100vw - 32px);
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .status-cluster {
+    max-width: 100%;
   }
 
   .player-area {
@@ -186,6 +288,16 @@ video {
 
   video {
     max-height: calc(100vh - 202px);
+  }
+
+  .clients-panel {
+    right: 12px;
+    bottom: 12px;
+    width: min(190px, calc(100vw - 24px));
+  }
+
+  .clients-panel.is-open {
+    width: min(240px, calc(100vw - 24px));
   }
 
 }

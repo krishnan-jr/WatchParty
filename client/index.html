@@ -30,6 +30,20 @@
         </div>
       </section>
 
+      <aside class="clients-panel" id="clientsPanel" aria-label="Connected clients">
+        <button
+          class="clients-toggle"
+          id="clientsToggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="clientList"
+        >
+          <span>Connected</span>
+          <span class="client-count" id="clientCount">0</span>
+        </button>
+        <ul class="client-list" id="clientList"></ul>
+      </aside>
+
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
