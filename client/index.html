@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Watch Party</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="top-bar">
+        <div>
+          <p class="eyebrow">Local watch party</p>
+          <h1>Watch Party</h1>
+        </div>
+        <div class="status-cluster" aria-live="polite">
+          <span class="status-pill" id="connectionStatus">Connecting...</span>
+          <span class="status-pill muted" id="syncStatus">Waiting for sync</span>
+        </div>
+      </header>
+
+      <section class="player-area" aria-label="Watch party video">
+        <div class="video-frame">
+          <video id="player" controls src="/video" preload="metadata"></video>
+        </div>
+      </section>
+
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
