@@ -5,6 +5,8 @@
   const player = document.getElementById("player");
   const currentVideoName = document.getElementById("currentVideoName");
   const videoSelect = document.getElementById("videoSelect");
+  const subtitleSelect = document.getElementById("subtitleSelect");
+  const subtitleTrack = document.getElementById("subtitleTrack");
   const shareLink = document.getElementById("shareLink");
   const connectionStatus = document.getElementById("connectionStatus");
   const syncStatus = document.getElementById("syncStatus");
@@ -62,6 +64,18 @@
     }, 100);
   }
 
+  function updateSubtitleSource(name, timestamp) {
+    subtitleTrack.removeAttribute("src");
+    subtitleTrack.track.mode = "disabled";
+
+    if (!name) {
+      return;
+    }
+
+    subtitleTrack.src = `/subtitle?v=${timestamp || Date.now()}`;
+    subtitleTrack.track.mode = "showing";
+  }
+
   async function loadVideoList() {
     const response = await fetch("/videos");
 
@@ -109,6 +123,54 @@
 
     shareLink.href = result.url;
     shareLink.classList.add("is-visible");
+  }
+
+  async function loadSubtitleList() {
+    const response = await fetch("/subtitles");
+
+    if (!response.ok) {
+      throw new Error("Could not load subtitles");
+    }
+
+    const result = await response.json();
+    subtitleSelect.replaceChildren();
+
+    const offOption = document.createElement("option");
+    offOption.value = "";
+    offOption.textContent = "Off";
+    subtitleSelect.appendChild(offOption);
+
+    result.files.forEach((file) => {
+      const option = document.createElement("option");
+      option.value = file;
+      option.textContent = file;
+      subtitleSelect.appendChild(option);
+    });
+
+    subtitleSelect.value = result.active || "";
+    updateSubtitleSource(result.active, Date.now());
+  }
+
+  async function selectSubtitle(name) {
+    setSyncStatus(name ? "Loading subtitles..." : "Subtitles off");
+
+    const response = await fetch("/subtitles/active", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Could not select subtitles");
+    }
+
+    const result = await response.json();
+    subtitleSelect.value = result.active || "";
+    updateSubtitleSource(result.active, Date.now());
+    setSyncStatus(result.active ? `Subtitles ${result.active}` : "Subtitles off");
   }
 
   async function selectVideo(name) {
@@ -228,13 +290,31 @@
     setSyncStatus("Video loaded");
   });
 
+  socket.on("subtitleChanged", (payload) => {
+    const name = payload && payload.name;
+    const timestamp = payload && payload.timestamp;
+    subtitleSelect.value = name || "";
+    updateSubtitleSource(name, timestamp);
+    setSyncStatus(name ? "Subtitles loaded" : "Subtitles off");
+  });
+
   videoSelect.addEventListener("change", () => {
     selectVideo(videoSelect.value).catch((error) => {
       setSyncStatus(error.message);
     });
   });
 
+  subtitleSelect.addEventListener("change", () => {
+    selectSubtitle(subtitleSelect.value).catch((error) => {
+      setSyncStatus(error.message);
+    });
+  });
+
   loadVideoList().catch((error) => {
+    setSyncStatus(error.message);
+  });
+
+  loadSubtitleList().catch((error) => {
     setSyncStatus(error.message);
   });
 

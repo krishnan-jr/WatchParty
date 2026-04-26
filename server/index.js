@@ -3,8 +3,9 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 
+const { getSubtitles, selectSubtitle, streamSubtitle } = require("./subtitleController");
 const { getVideos, selectVideo, streamVideo } = require("./videoController");
-const { configureSocket, resetPlayback } = require("./socket");
+const { broadcastSubtitle, configureSocket, resetPlayback } = require("./socket");
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_DIR = path.join(__dirname, "..", "client");
@@ -18,6 +19,11 @@ app.use(express.static(CLIENT_DIR));
 app.get("/videos", getVideos);
 app.put("/videos/active", (req, res) => selectVideo(req, res, (name) => resetPlayback(io, name)));
 app.get("/video", streamVideo);
+app.get("/subtitles", getSubtitles);
+app.put("/subtitles/active", (req, res) =>
+  selectSubtitle(req, res, (name) => broadcastSubtitle(io, name))
+);
+app.get("/subtitle", streamSubtitle);
 app.get("/tunnel", async (req, res) => {
   try {
     const response = await fetch("http://127.0.0.1:4040/api/tunnels");

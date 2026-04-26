@@ -86,6 +86,10 @@ body {
   color: #77808c;
 }
 
+.compact-select {
+  width: min(22vw, 260px);
+}
+
 .video-select option {
   background: #1b1d21;
   color: #f7f4ec;
@@ -300,6 +304,10 @@ video {
   .video-select {
     width: 100%;
     max-width: 100%;
+  }
+
+  .compact-select {
+    width: 100%;
   }
 
   .status-cluster {

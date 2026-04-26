@@ -17,6 +17,10 @@
           <select class="video-select" id="videoSelect">
             <option value="">No videos found</option>
           </select>
+          <label class="select-label" for="subtitleSelect">Subtitles</label>
+          <select class="video-select compact-select" id="subtitleSelect">
+            <option value="">Off</option>
+          </select>
           <div class="status-cluster" aria-live="polite">
             <a class="share-link" id="shareLink" href="#" target="_blank" rel="noreferrer">Share</a>
             <span class="status-pill" id="connectionStatus">Connecting...</span>
@@ -27,7 +31,9 @@
 
       <section class="player-area" aria-label="Watch party video">
         <div class="video-frame">
-          <video id="player" controls src="/video" preload="metadata"></video>
+          <video id="player" controls src="/video" preload="metadata">
+            <track id="subtitleTrack" kind="subtitles" srclang="en" label="Subtitles">
+          </video>
         </div>
       </section>
 

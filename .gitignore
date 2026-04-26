@@ -1,3 +1,5 @@
 node_modules/
 video/*.mp4
+subtitles/*.srt
+subtitles/*.vtt
 *.log

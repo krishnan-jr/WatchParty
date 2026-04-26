@@ -91,6 +91,13 @@ function resetPlayback(io, videoName) {
   broadcastSync(io);
 }
 
+function broadcastSubtitle(io, subtitleName) {
+  io.emit("subtitleChanged", {
+    name: subtitleName,
+    timestamp: now()
+  });
+}
+
 function configureSocket(io) {
   io.on("connection", (socket) => {
     clients.set(socket.id, {
@@ -135,6 +142,7 @@ function configureSocket(io) {
 }
 
 module.exports = {
+  broadcastSubtitle,
   configureSocket,
   resetPlayback
 };
