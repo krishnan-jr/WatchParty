@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-PORT="${PORT:-3000}"
+PORT="${PORT:-3343}"
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SERVER_PID=""
 NGROK_PID=""

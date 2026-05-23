@@ -3,3 +3,4 @@ video/*.mp4
 subtitles/*.srt
 subtitles/*.vtt
 *.log
+video/*

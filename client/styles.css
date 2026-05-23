@@ -59,10 +59,64 @@ body {
   gap: 10px;
 }
 
+.room-video {
+  max-width: min(52vw, 760px);
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: #a9b0ba;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .select-label {
   color: #a9b0ba;
   font-size: 13px;
   font-weight: 700;
+}
+
+.file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.file-button,
+.secondary-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.file-button {
+  background: #f7f4ec;
+  color: #101113;
+}
+
+.secondary-button {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f7f4ec;
+}
+
+.file-button:hover {
+  background: #ffffff;
+}
+
+.secondary-button:hover {
+  background: rgba(255, 255, 255, 0.11);
 }
 
 .video-select {
@@ -298,6 +352,11 @@ video {
     font-size: 26px;
     overflow-wrap: anywhere;
     text-overflow: clip;
+    white-space: normal;
+  }
+
+  .room-video {
+    max-width: 100%;
     white-space: normal;
   }
 
