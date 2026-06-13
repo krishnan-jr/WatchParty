@@ -385,17 +385,31 @@
       return;
     }
 
-    setSyncStatus("Streaming torrent...");
+    setSyncStatus("Buffering...");
     applyingRemoteSync = true;
     hasLocalVideo = true;
     setCurrentVideo(file.name);
 
-    file.renderTo(player, { autoplay: false }, (err) => {
-      if (err) {
-        setSyncStatus("Stream error: " + err.message);
-        hasLocalVideo = false;
-      }
-    });
+    player.pause();
+    player.removeAttribute("src");
+    player.load();
+
+    try {
+      file.renderTo(player, { autoplay: true }, (err) => {
+        if (err) {
+          setSyncStatus("Stream error: " + err.message);
+          hasLocalVideo = false;
+          applyingRemoteSync = false;
+          return;
+        }
+        setSyncStatus("Stream ready");
+      });
+    } catch (e) {
+      setSyncStatus("Stream error: " + e.message);
+      hasLocalVideo = false;
+      applyingRemoteSync = false;
+      return;
+    }
 
     player.addEventListener(
       "loadedmetadata",
