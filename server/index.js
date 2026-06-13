@@ -24,26 +24,9 @@ app.put("/subtitles/active", (req, res) =>
   selectSubtitle(req, res, (name) => broadcastSubtitle(io, name))
 );
 app.get("/subtitle", streamSubtitle);
-app.get("/tunnel", async (req, res) => {
-  if (process.env.RENDER_EXTERNAL_URL) {
-    res.json({ url: process.env.RENDER_EXTERNAL_URL });
-    return;
-  }
-
-  try {
-    const response = await fetch("http://127.0.0.1:4040/api/tunnels");
-    const data = await response.json();
-    const tunnel = data.tunnels.find((item) => item.proto === "https");
-
-    if (!tunnel) {
-      res.status(404).json({ url: null });
-      return;
-    }
-
-    res.json({ url: tunnel.public_url });
-  } catch (error) {
-    res.status(404).json({ url: null });
-  }
+app.get("/tunnel", (req, res) => {
+  const url = process.env.RENDER_EXTERNAL_URL || null;
+  res.status(url ? 200 : 404).json({ url });
 });
 
 configureSocket(io);

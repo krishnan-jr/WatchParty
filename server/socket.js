@@ -1,5 +1,5 @@
 const SYNC_INTERVAL_MS = 2500;
-globalThis.WATCH_PARTY_LOGGING = true;
+globalThis.WATCH_PARTY_LOGGING = !process.env.RENDER;
 
 const state = {
   currentTime: 0,
