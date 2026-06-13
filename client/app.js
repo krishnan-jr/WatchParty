@@ -14,6 +14,29 @@
   const magnetDrawer = document.getElementById("magnetDrawer");
   const magnetInput = document.getElementById("magnetInput");
   const magnetButton = document.getElementById("magnetButton");
+  const filePicker = document.getElementById("filePicker");
+  const filePickerBackdrop = document.getElementById("filePickerBackdrop");
+  const filePickerList = document.getElementById("filePickerList");
+  const torrentPanel = document.getElementById("torrentPanel");
+  const torrentToggle = document.getElementById("torrentToggle");
+  const torrentHealthDot = document.getElementById("torrentHealthDot");
+  const torrentHealthLabel = document.getElementById("torrentHealthLabel");
+  const torrentInfoName = document.getElementById("torrentInfoName");
+  const torrentProgressFill = document.getElementById("torrentProgressFill");
+  const torrentProgressLabel = document.getElementById("torrentProgressLabel");
+  const tsStat = {
+    size: document.getElementById("ts-size"),
+    remaining: document.getElementById("ts-remaining"),
+    downloaded: document.getElementById("ts-downloaded"),
+    uploaded: document.getElementById("ts-uploaded"),
+    ratio: document.getElementById("ts-ratio"),
+    peers: document.getElementById("ts-peers"),
+    down: document.getElementById("ts-down"),
+    up: document.getElementById("ts-up"),
+    eta: document.getElementById("ts-eta"),
+    streaming: document.getElementById("ts-streaming"),
+    status: document.getElementById("ts-status")
+  };
   const shareLink = document.getElementById("shareLink");
   const connectionStatus = document.getElementById("connectionStatus");
   const syncStatus = document.getElementById("syncStatus");
@@ -30,6 +53,8 @@
   let localSubtitleUrl = null;
   let seekTimer = null;
   let torrentClient = null;
+  let torrentUpdateInterval = null;
+  let videoBitrate = null;
 
   function roundSeconds(value) {
     return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(3)) : value;
@@ -240,6 +265,160 @@
     setSyncStatus("Local subtitles loaded");
   }
 
+  const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "m4v", "ts", "wmv", "flv", "ogv"]);
+
+  function isVideoFile(file) {
+    return VIDEO_EXTENSIONS.has(file.name.split(".").pop().toLowerCase());
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+  }
+
+  function formatSpeed(bps) {
+    if (bps < 1024) return `${Math.round(bps)} B/s`;
+    if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
+    return `${(bps / (1024 * 1024)).toFixed(2)} MB/s`;
+  }
+
+  function formatETA(ms) {
+    if (!ms || !Number.isFinite(ms) || ms <= 0) return "—";
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+  }
+
+  function getTorrentHealth(torrent) {
+    if (torrent.done) return { label: "Seeding", level: 5 };
+    const { numPeers, downloadSpeed } = torrent;
+    if (numPeers === 0) return { label: "Dead", level: 0 };
+    if (numPeers <= 2 || downloadSpeed < 50 * 1024) return { label: "Poor", level: 1 };
+    if (numPeers <= 5 || downloadSpeed < 500 * 1024) return { label: "Fair", level: 2 };
+    if (numPeers <= 15 || downloadSpeed < 2 * 1024 * 1024) return { label: "Good", level: 3 };
+    return { label: "Excellent", level: 4 };
+  }
+
+  function getStreamingViability(torrent) {
+    if (!videoBitrate) return { label: "—", ok: null };
+    if (torrent.done) return { label: "Fully buffered", ok: true };
+    if (torrent.downloadSpeed >= videoBitrate * 1.2) return { label: "Buffering ahead", ok: true };
+    if (torrent.downloadSpeed >= videoBitrate * 0.8) return { label: "Keeping up", ok: true };
+    return { label: "May stutter", ok: false };
+  }
+
+  function updateTorrentPanel(torrent) {
+    const health = getTorrentHealth(torrent);
+    const viability = getStreamingViability(torrent);
+    const progress = torrent.progress;
+
+    torrentHealthDot.dataset.level = health.level;
+    torrentHealthLabel.textContent = health.label;
+    torrentInfoName.textContent = torrent.name || "—";
+    torrentProgressFill.style.width = `${(progress * 100).toFixed(1)}%`;
+    torrentProgressLabel.textContent = `${(progress * 100).toFixed(1)}%`;
+
+    tsStat.size.textContent = formatBytes(torrent.length);
+    tsStat.remaining.textContent = formatBytes(torrent.length * (1 - progress));
+    tsStat.downloaded.textContent = formatBytes(torrent.downloaded);
+    tsStat.uploaded.textContent = formatBytes(torrent.uploaded);
+    tsStat.ratio.textContent = torrent.ratio.toFixed(2);
+    tsStat.peers.textContent = torrent.numPeers;
+    tsStat.down.textContent = formatSpeed(torrent.downloadSpeed);
+    tsStat.up.textContent = formatSpeed(torrent.uploadSpeed);
+    tsStat.eta.textContent = torrent.done ? "Done" : formatETA(torrent.timeRemaining);
+    tsStat.streaming.textContent = viability.label;
+    if (viability.ok !== null) {
+      tsStat.streaming.dataset.ok = viability.ok;
+    } else {
+      delete tsStat.streaming.dataset.ok;
+    }
+    tsStat.status.textContent = torrent.done ? "Seeding" : torrent.paused ? "Paused" : "Downloading";
+  }
+
+  function startTorrentPanel(torrent) {
+    torrentPanel.removeAttribute("hidden");
+    torrentPanel.classList.add("is-open");
+    torrentToggle.setAttribute("aria-expanded", "true");
+    updateTorrentPanel(torrent);
+    torrentUpdateInterval = setInterval(() => updateTorrentPanel(torrent), 1000);
+  }
+
+  function stopTorrentPanel() {
+    clearInterval(torrentUpdateInterval);
+    torrentUpdateInterval = null;
+    videoBitrate = null;
+    torrentPanel.setAttribute("hidden", "");
+    torrentPanel.classList.remove("is-open");
+    torrentToggle.setAttribute("aria-expanded", "false");
+  }
+
+  function streamFile(file) {
+    setSyncStatus("Streaming torrent...");
+    applyingRemoteSync = true;
+    hasLocalVideo = true;
+    setCurrentVideo(file.name);
+
+    file.renderTo(player, { autoplay: false }, (err) => {
+      if (err) {
+        setSyncStatus("Stream error: " + err.message);
+        hasLocalVideo = false;
+      }
+    });
+
+    player.addEventListener(
+      "loadedmetadata",
+      () => {
+        if (player.duration && file.length) {
+          videoBitrate = file.length / player.duration;
+        }
+        const payload = { name: file.name, duration: player.duration, timestamp: Date.now() };
+        logWatchParty("emit media (torrent)", { payload: formatPayload(payload) });
+        socket.emit("media", payload);
+        if (lastSync) {
+          applySync(lastSync);
+        }
+      },
+      { once: true }
+    );
+
+    window.setTimeout(() => {
+      applyingRemoteSync = false;
+    }, 150);
+  }
+
+  function showFilePicker(videoFiles) {
+    filePickerList.replaceChildren();
+
+    videoFiles.forEach((file) => {
+      const li = document.createElement("li");
+      li.className = "file-picker-item";
+
+      const name = document.createElement("span");
+      name.className = "file-picker-name";
+      name.textContent = file.name;
+
+      const size = document.createElement("span");
+      size.className = "file-picker-size";
+      size.textContent = formatBytes(file.length);
+
+      li.append(name, size);
+      li.addEventListener("click", () => {
+        filePicker.setAttribute("hidden", "");
+        streamFile(file);
+      });
+      filePickerList.appendChild(li);
+    });
+
+    filePicker.removeAttribute("hidden");
+  }
+
   function loadMagnet(magnetUri) {
     if (!magnetUri.trim().startsWith("magnet:")) {
       setSyncStatus("Not a valid magnet link");
@@ -251,10 +430,16 @@
       torrentClient = null;
     }
 
+    stopTorrentPanel();
+
     if (localVideoUrl) {
       URL.revokeObjectURL(localVideoUrl);
       localVideoUrl = null;
     }
+
+    history.replaceState(null, "", "#" + encodeURIComponent(magnetUri.trim()));
+    magnetInput.value = magnetUri.trim();
+    updateShareHref();
 
     setSyncStatus("Finding peers...");
     magnetButton.disabled = true;
@@ -269,39 +454,33 @@
     });
 
     torrentClient.add(magnetUri.trim(), (torrent) => {
-      const file = torrent.files.reduce((a, b) => (a.size > b.size ? a : b));
+      magnetButton.disabled = false;
+      magnetButton.textContent = "Stream";
 
-      setSyncStatus("Streaming torrent...");
-      applyingRemoteSync = true;
-      hasLocalVideo = true;
-      setCurrentVideo(file.name);
+      const videoFiles = torrent.files.filter(isVideoFile);
 
-      file.renderTo(player, { autoplay: false }, (err) => {
-        magnetButton.disabled = false;
-        magnetButton.textContent = "Stream";
-        if (err) {
-          setSyncStatus("Stream error: " + err.message);
-          hasLocalVideo = false;
-        }
-      });
+      if (videoFiles.length === 0) {
+        setSyncStatus("No streamable video files in torrent");
+        return;
+      }
 
-      player.addEventListener(
-        "loadedmetadata",
-        () => {
-          const payload = { name: file.name, duration: player.duration, timestamp: Date.now() };
-          logWatchParty("emit media (torrent)", { payload: formatPayload(payload) });
-          socket.emit("media", payload);
-          if (lastSync) {
-            applySync(lastSync);
-          }
-        },
-        { once: true }
-      );
+      startTorrentPanel(torrent);
 
-      window.setTimeout(() => {
-        applyingRemoteSync = false;
-      }, 150);
+      if (videoFiles.length === 1) {
+        streamFile(videoFiles[0]);
+        return;
+      }
+
+      showFilePicker(videoFiles);
     });
+  }
+
+  let shareBaseUrl = null;
+  let shareCopyTimer = null;
+
+  function updateShareHref() {
+    if (!shareBaseUrl) return;
+    shareLink.dataset.url = shareBaseUrl + window.location.hash;
   }
 
   async function loadShareLink() {
@@ -316,9 +495,22 @@
       return;
     }
 
-    shareLink.href = result.url;
+    shareBaseUrl = result.url;
+    updateShareHref();
     shareLink.classList.add("is-visible");
   }
+
+  shareLink.addEventListener("click", () => {
+    const url = shareLink.dataset.url;
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      shareLink.textContent = "Copied!";
+      clearTimeout(shareCopyTimer);
+      shareCopyTimer = setTimeout(() => {
+        shareLink.textContent = "Share";
+      }, 2000);
+    });
+  });
 
   socket.on("connect", () => {
     logWatchParty("socket connected", {
@@ -369,6 +561,15 @@
     clientsToggle.setAttribute("aria-expanded", String(isOpen));
   });
 
+  torrentToggle.addEventListener("click", () => {
+    const isOpen = torrentPanel.classList.toggle("is-open");
+    torrentToggle.setAttribute("aria-expanded", String(isOpen));
+  });
+
+  filePickerBackdrop.addEventListener("click", () => {
+    filePicker.setAttribute("hidden", "");
+  });
+
   magnetToggle.addEventListener("click", () => {
     const nowHidden = magnetDrawer.toggleAttribute("hidden");
     if (!nowHidden) {
@@ -396,6 +597,10 @@
       torrentClient.destroy();
       torrentClient = null;
     }
+
+    stopTorrentPanel();
+    history.replaceState(null, "", window.location.pathname);
+    updateShareHref();
 
     if (localVideoUrl) {
       URL.revokeObjectURL(localVideoUrl);
@@ -520,6 +725,13 @@
       applySync(lastSync);
     }
   });
+
+  if (window.location.hash) {
+    const hashValue = decodeURIComponent(window.location.hash.slice(1));
+    if (hashValue.startsWith("magnet:")) {
+      loadMagnet(hashValue);
+    }
+  }
 
   loadShareLink().catch(() => {});
 })();

@@ -157,21 +157,24 @@ body {
   align-items: center;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: 999px;
   background: var(--text);
   color: var(--bg);
+  font: inherit;
   font-size: 12px;
   font-weight: 700;
-  text-decoration: none;
+  cursor: pointer;
   transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .share-link.is-visible {
   display: inline-flex;
 }
 
-.share-link:hover {
+.share-link:hover,
+.share-link:focus-visible {
   background: #fff;
 }
 
@@ -369,6 +372,247 @@ video {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Torrent panel ── */
+
+.torrent-panel {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 10;
+  width: min(260px, calc(100vw - 32px));
+}
+
+.torrent-panel[hidden] {
+  display: none;
+}
+
+.torrent-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(20, 22, 26, 0.9);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.torrent-toggle:hover {
+  background: rgba(28, 31, 36, 0.96);
+}
+
+.torrent-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.torrent-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #3a3f4d;
+  transition: background 0.3s;
+}
+
+.torrent-health-dot[data-level="0"] { background: #f87171; }
+.torrent-health-dot[data-level="1"] { background: #fb923c; }
+.torrent-health-dot[data-level="2"] { background: #fbbf24; }
+.torrent-health-dot[data-level="3"] { background: #4ade80; }
+.torrent-health-dot[data-level="4"] { background: #22c55e; }
+.torrent-health-dot[data-level="5"] { background: #60a5fa; }
+
+.torrent-health-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.torrent-info {
+  display: none;
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(20, 22, 26, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.torrent-panel.is-open .torrent-info {
+  display: block;
+}
+
+.torrent-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 10px;
+}
+
+.torrent-progress-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.torrent-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--green);
+  width: 0%;
+  transition: width 0.6s ease;
+}
+
+.torrent-progress-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  margin-bottom: 10px;
+}
+
+.torrent-stats {
+  display: grid;
+}
+
+.torrent-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.torrent-stat:last-child {
+  border-bottom: none;
+}
+
+.torrent-stat--divider {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.torrent-stat dt {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.torrent-stat dd {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.torrent-stat dd[data-ok="true"] { color: var(--green); }
+.torrent-stat dd[data-ok="false"] { color: var(--red); }
+
+/* ── File picker modal ── */
+
+.file-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.file-picker[hidden] {
+  display: none;
+}
+
+.file-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.file-picker-modal {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 70dvh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.file-picker-title {
+  padding: 16px 18px;
+  font-size: 14px;
+  font-weight: 650;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.file-picker-list {
+  overflow-y: auto;
+  list-style: none;
+  padding: 6px;
+}
+
+.file-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.file-picker-item:hover {
+  background: var(--surface-2);
+}
+
+.file-picker-name {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-picker-size {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 /* ── Mobile ── */

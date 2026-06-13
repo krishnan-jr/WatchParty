@@ -21,7 +21,7 @@
           <input id="localSubtitleFile" class="file-input" type="file" accept=".vtt,.srt,text/vtt">
           <button id="magnetToggle" class="btn btn--secondary" type="button">Magnet</button>
           <div class="status-cluster" aria-live="polite">
-            <a class="share-link" id="shareLink" href="#" target="_blank" rel="noreferrer">Share</a>
+            <button class="share-link" id="shareLink" type="button">Share</button>
             <span class="status-pill" id="connectionStatus">Connecting...</span>
             <span class="status-pill muted" id="syncStatus">Waiting for sync</span>
           </div>
@@ -40,6 +40,44 @@
           </video>
         </div>
       </section>
+
+      <div class="file-picker" id="filePicker" hidden>
+        <div class="file-picker-backdrop" id="filePickerBackdrop"></div>
+        <div class="file-picker-modal" role="dialog" aria-modal="true" aria-labelledby="filePickerTitle">
+          <h2 class="file-picker-title" id="filePickerTitle">Choose a file to stream</h2>
+          <ul class="file-picker-list" id="filePickerList"></ul>
+        </div>
+      </div>
+
+      <aside class="torrent-panel" id="torrentPanel" hidden>
+        <button class="torrent-toggle" id="torrentToggle" type="button" aria-expanded="false" aria-controls="torrentInfo">
+          <div class="torrent-toggle-left">
+            <span class="torrent-health-dot" id="torrentHealthDot"></span>
+            <span>Torrent</span>
+          </div>
+          <span class="torrent-health-label" id="torrentHealthLabel">—</span>
+        </button>
+        <div class="torrent-info" id="torrentInfo">
+          <p class="torrent-name" id="torrentInfoName">—</p>
+          <div class="torrent-progress-track">
+            <div class="torrent-progress-fill" id="torrentProgressFill"></div>
+          </div>
+          <p class="torrent-progress-label" id="torrentProgressLabel">0%</p>
+          <dl class="torrent-stats">
+            <div class="torrent-stat"><dt>Size</dt><dd id="ts-size">—</dd></div>
+            <div class="torrent-stat"><dt>Remaining</dt><dd id="ts-remaining">—</dd></div>
+            <div class="torrent-stat"><dt>Downloaded</dt><dd id="ts-downloaded">—</dd></div>
+            <div class="torrent-stat"><dt>Uploaded</dt><dd id="ts-uploaded">—</dd></div>
+            <div class="torrent-stat"><dt>Ratio</dt><dd id="ts-ratio">—</dd></div>
+            <div class="torrent-stat torrent-stat--divider"><dt>Peers</dt><dd id="ts-peers">—</dd></div>
+            <div class="torrent-stat"><dt>↓ Speed</dt><dd id="ts-down">—</dd></div>
+            <div class="torrent-stat"><dt>↑ Speed</dt><dd id="ts-up">—</dd></div>
+            <div class="torrent-stat"><dt>ETA</dt><dd id="ts-eta">—</dd></div>
+            <div class="torrent-stat torrent-stat--divider"><dt>Streaming</dt><dd id="ts-streaming">—</dd></div>
+            <div class="torrent-stat"><dt>Status</dt><dd id="ts-status">—</dd></div>
+          </dl>
+        </div>
+      </aside>
 
       <aside class="clients-panel" id="clientsPanel" aria-label="Connected clients">
         <button
