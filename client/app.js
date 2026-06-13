@@ -291,6 +291,72 @@
     return MSE_EXTENSIONS.has(file.name.split(".").pop().toLowerCase());
   }
 
+  const STREAM_MIME = {
+    mp4: 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+    m4v: 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+    webm: 'video/webm; codecs="vp8, vorbis"',
+    ogg: 'video/ogg; codecs="theora, vorbis"'
+  };
+
+  function streamViaMSE(file) {
+    const ext = file.name.split(".").pop().toLowerCase();
+    const mimeType = STREAM_MIME[ext];
+    if (!mimeType || !MediaSource.isTypeSupported(mimeType)) return false;
+
+    const mediaSource = new MediaSource();
+    player.src = URL.createObjectURL(mediaSource);
+    player.load();
+
+    mediaSource.addEventListener("sourceopen", () => {
+      let sb;
+      try {
+        sb = mediaSource.addSourceBuffer(mimeType);
+      } catch (e) {
+        setSyncStatus("Format not supported for streaming");
+        return;
+      }
+
+      const queue = [];
+      let appending = false;
+      let streamDone = false;
+
+      function flush() {
+        if (appending || queue.length === 0) {
+          if (streamDone && !appending && mediaSource.readyState === "open") {
+            mediaSource.endOfStream();
+          }
+          return;
+        }
+        appending = true;
+        sb.appendBuffer(queue.shift());
+      }
+
+      sb.addEventListener("updateend", () => {
+        appending = false;
+        flush();
+      });
+
+      sb.addEventListener("error", (e) => {
+        setSyncStatus("Stream buffer error — format may not be supported");
+      });
+
+      const stream = file.createReadStream();
+      stream.on("data", (chunk) => {
+        queue.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
+        flush();
+      });
+      stream.on("end", () => {
+        streamDone = true;
+        flush();
+      });
+      stream.on("error", (err) => {
+        setSyncStatus("Stream error: " + err.message);
+      });
+    }, { once: true });
+
+    return true;
+  }
+
   function formatBytes(bytes) {
     if (!bytes) return "0 B";
     const units = ["B", "KB", "MB", "GB"];
@@ -397,18 +463,25 @@
     try {
       file.renderTo(player, { autoplay: true }, (err) => {
         if (err) {
-          setSyncStatus("Stream error: " + err.message);
-          hasLocalVideo = false;
-          applyingRemoteSync = false;
+          if (streamViaMSE(file)) {
+            setSyncStatus("Streaming via chunks...");
+          } else {
+            setSyncStatus("Format not supported for in-browser streaming");
+            hasLocalVideo = false;
+            applyingRemoteSync = false;
+          }
           return;
         }
         setSyncStatus("Stream ready");
       });
     } catch (e) {
-      setSyncStatus("Stream error: " + e.message);
-      hasLocalVideo = false;
-      applyingRemoteSync = false;
-      return;
+      if (streamViaMSE(file)) {
+        setSyncStatus("Streaming via chunks...");
+      } else {
+        setSyncStatus("Format not supported for in-browser streaming");
+        hasLocalVideo = false;
+        applyingRemoteSync = false;
+      }
     }
 
     player.addEventListener(
