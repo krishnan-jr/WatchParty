@@ -4,3 +4,4 @@ subtitles/*.srt
 subtitles/*.vtt
 *.log
 video/*
+graphify-out
