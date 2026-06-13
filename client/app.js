@@ -379,6 +379,11 @@
   }
 
   function streamFile(file) {
+    if (typeof file.renderTo !== "function") {
+      setSyncStatus("Torrent streaming unavailable — unsupported WebTorrent version");
+      return;
+    }
+
     setSyncStatus("Streaming torrent...");
     applyingRemoteSync = true;
     hasLocalVideo = true;
