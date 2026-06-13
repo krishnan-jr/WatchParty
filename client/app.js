@@ -997,6 +997,23 @@
     emitAction("pause");
   });
 
+  // Chromium disables the native fullscreen button on MediaSource-fed video
+  // (WebTorrent's streaming path), so drive fullscreen ourselves on double-click.
+  function toggleFullscreen() {
+    const active = document.fullscreenElement || document.webkitFullscreenElement;
+    if (active) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else if (player.requestFullscreen) {
+      player.requestFullscreen().catch(() => {});
+    } else if (player.webkitRequestFullscreen) {
+      player.webkitRequestFullscreen();
+    } else if (player.webkitEnterFullscreen) {
+      player.webkitEnterFullscreen(); // iOS Safari
+    }
+  }
+
+  player.addEventListener("dblclick", toggleFullscreen);
+
   player.addEventListener("seeked", () => {
     if (applyingRemoteSync) {
       logWatchParty("ignore local seeked", {
