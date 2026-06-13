@@ -10,6 +10,10 @@
   const localVideoFile = document.getElementById("localVideoFile");
   const localSubtitleFile = document.getElementById("localSubtitleFile");
   const subtitleTrack = document.getElementById("subtitleTrack");
+  const magnetToggle = document.getElementById("magnetToggle");
+  const magnetDrawer = document.getElementById("magnetDrawer");
+  const magnetInput = document.getElementById("magnetInput");
+  const magnetButton = document.getElementById("magnetButton");
   const shareLink = document.getElementById("shareLink");
   const connectionStatus = document.getElementById("connectionStatus");
   const syncStatus = document.getElementById("syncStatus");
@@ -25,6 +29,7 @@
   let localVideoUrl = null;
   let localSubtitleUrl = null;
   let seekTimer = null;
+  let torrentClient = null;
 
   function roundSeconds(value) {
     return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(3)) : value;
@@ -235,6 +240,70 @@
     setSyncStatus("Local subtitles loaded");
   }
 
+  function loadMagnet(magnetUri) {
+    if (!magnetUri.trim().startsWith("magnet:")) {
+      setSyncStatus("Not a valid magnet link");
+      return;
+    }
+
+    if (torrentClient) {
+      torrentClient.destroy();
+      torrentClient = null;
+    }
+
+    if (localVideoUrl) {
+      URL.revokeObjectURL(localVideoUrl);
+      localVideoUrl = null;
+    }
+
+    setSyncStatus("Finding peers...");
+    magnetButton.disabled = true;
+    magnetButton.textContent = "Loading...";
+
+    torrentClient = new WebTorrent();
+
+    torrentClient.on("error", (err) => {
+      setSyncStatus("Torrent error: " + err.message);
+      magnetButton.disabled = false;
+      magnetButton.textContent = "Stream";
+    });
+
+    torrentClient.add(magnetUri.trim(), (torrent) => {
+      const file = torrent.files.reduce((a, b) => (a.size > b.size ? a : b));
+
+      setSyncStatus("Streaming torrent...");
+      applyingRemoteSync = true;
+      hasLocalVideo = true;
+      setCurrentVideo(file.name);
+
+      file.renderTo(player, { autoplay: false }, (err) => {
+        magnetButton.disabled = false;
+        magnetButton.textContent = "Stream";
+        if (err) {
+          setSyncStatus("Stream error: " + err.message);
+          hasLocalVideo = false;
+        }
+      });
+
+      player.addEventListener(
+        "loadedmetadata",
+        () => {
+          const payload = { name: file.name, duration: player.duration, timestamp: Date.now() };
+          logWatchParty("emit media (torrent)", { payload: formatPayload(payload) });
+          socket.emit("media", payload);
+          if (lastSync) {
+            applySync(lastSync);
+          }
+        },
+        { once: true }
+      );
+
+      window.setTimeout(() => {
+        applyingRemoteSync = false;
+      }, 150);
+    });
+  }
+
   async function loadShareLink() {
     const response = await fetch("/tunnel");
 
@@ -300,10 +369,32 @@
     clientsToggle.setAttribute("aria-expanded", String(isOpen));
   });
 
+  magnetToggle.addEventListener("click", () => {
+    const nowHidden = magnetDrawer.toggleAttribute("hidden");
+    if (!nowHidden) {
+      magnetInput.focus();
+    }
+  });
+
+  magnetButton.addEventListener("click", () => {
+    loadMagnet(magnetInput.value);
+  });
+
+  magnetInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      loadMagnet(magnetInput.value);
+    }
+  });
+
   localVideoFile.addEventListener("change", () => {
     const file = localVideoFile.files && localVideoFile.files[0];
     if (!file) {
       return;
+    }
+
+    if (torrentClient) {
+      torrentClient.destroy();
+      torrentClient = null;
     }
 
     if (localVideoUrl) {

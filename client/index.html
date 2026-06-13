@@ -8,16 +8,18 @@
   </head>
   <body>
     <main class="app-shell">
+
       <header class="top-bar">
-        <div>
+        <div class="title-block">
           <h1 class="current-video" id="currentVideoName">Choose local video</h1>
           <p class="room-video" id="roomVideoName">No room video announced</p>
         </div>
         <div class="top-actions">
-          <label class="file-button" for="localVideoFile">Choose Video</label>
+          <label class="btn btn--primary" for="localVideoFile">Video</label>
           <input id="localVideoFile" class="file-input" type="file" accept="video/*">
-          <label class="secondary-button" for="localSubtitleFile">Subtitles</label>
+          <label class="btn btn--secondary" for="localSubtitleFile">Subtitles</label>
           <input id="localSubtitleFile" class="file-input" type="file" accept=".vtt,.srt,text/vtt">
+          <button id="magnetToggle" class="btn btn--secondary" type="button">Magnet</button>
           <div class="status-cluster" aria-live="polite">
             <a class="share-link" id="shareLink" href="#" target="_blank" rel="noreferrer">Share</a>
             <span class="status-pill" id="connectionStatus">Connecting...</span>
@@ -25,6 +27,11 @@
           </div>
         </div>
       </header>
+
+      <div class="magnet-drawer" id="magnetDrawer" hidden>
+        <input id="magnetInput" class="magnet-input" type="text" placeholder="magnet:?xt=urn:btih:…" autocomplete="off" spellcheck="false">
+        <button id="magnetButton" class="btn btn--primary" type="button">Stream</button>
+      </div>
 
       <section class="player-area" aria-label="Watch party video">
         <div class="video-frame">
@@ -51,6 +58,7 @@
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webtorrent/webtorrent.min.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>
