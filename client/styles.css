@@ -533,6 +533,28 @@ video {
 .torrent-stat dd[data-ok="true"] { color: var(--green); }
 .torrent-stat dd[data-ok="false"] { color: var(--red); }
 
+.torrent-clear-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 0;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 7px;
+  background: rgba(248, 113, 113, 0.08);
+  color: var(--red);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.torrent-clear-btn:hover {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
 /* ── File picker modal ── */
 
 .file-picker {
@@ -609,10 +631,26 @@ video {
   white-space: nowrap;
 }
 
+.file-picker-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .file-picker-size {
   font-size: 12px;
   color: var(--text-muted);
-  flex-shrink: 0;
+}
+
+.file-picker-warn {
+  font-size: 11px;
+  color: var(--amber);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
 }
 
 /* ── Mobile ── */

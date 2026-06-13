@@ -19,6 +19,7 @@
   const filePickerList = document.getElementById("filePickerList");
   const torrentPanel = document.getElementById("torrentPanel");
   const torrentToggle = document.getElementById("torrentToggle");
+  const torrentClear = document.getElementById("torrentClear");
   const torrentHealthDot = document.getElementById("torrentHealthDot");
   const torrentHealthLabel = document.getElementById("torrentHealthLabel");
   const torrentInfoName = document.getElementById("torrentInfoName");
@@ -266,9 +267,27 @@
   }
 
   const VIDEO_EXTENSIONS = new Set(["mp4", "mkv", "avi", "mov", "webm", "m4v", "ts", "wmv", "flv", "ogv"]);
+  const MSE_EXTENSIONS = new Set(["mp4", "webm", "ogg"]);
+
+  const WSS_TRACKERS = [
+    "wss://tracker.btorrent.xyz",
+    "wss://tracker.openwebtorrent.com",
+    "wss://tracker.fastcast.nz"
+  ];
+
+  function injectWssTrackers(magnetUri) {
+    return WSS_TRACKERS.reduce((uri, tracker) => {
+      const encoded = encodeURIComponent(tracker);
+      return uri.includes(encoded) ? uri : uri + "&tr=" + encoded;
+    }, magnetUri);
+  }
 
   function isVideoFile(file) {
     return VIDEO_EXTENSIONS.has(file.name.split(".").pop().toLowerCase());
+  }
+
+  function isStreamable(file) {
+    return MSE_EXTENSIONS.has(file.name.split(".").pop().toLowerCase());
   }
 
   function formatBytes(bytes) {
@@ -404,11 +423,22 @@
       name.className = "file-picker-name";
       name.textContent = file.name;
 
+      const meta = document.createElement("span");
+      meta.className = "file-picker-meta";
+
       const size = document.createElement("span");
       size.className = "file-picker-size";
       size.textContent = formatBytes(file.length);
+      meta.appendChild(size);
 
-      li.append(name, size);
+      if (!isStreamable(file)) {
+        const warn = document.createElement("span");
+        warn.className = "file-picker-warn";
+        warn.textContent = "full download";
+        meta.appendChild(warn);
+      }
+
+      li.append(name, meta);
       li.addEventListener("click", () => {
         filePicker.setAttribute("hidden", "");
         streamFile(file);
@@ -453,14 +483,14 @@
       magnetButton.textContent = "Stream";
     });
 
-    torrentClient.add(magnetUri.trim(), (torrent) => {
+    torrentClient.add(injectWssTrackers(magnetUri.trim()), (torrent) => {
       magnetButton.disabled = false;
       magnetButton.textContent = "Stream";
 
       const videoFiles = torrent.files.filter(isVideoFile);
 
       if (videoFiles.length === 0) {
-        setSyncStatus("No streamable video files in torrent");
+        setSyncStatus("No video files found in torrent");
         return;
       }
 
@@ -468,6 +498,13 @@
 
       if (videoFiles.length === 1) {
         streamFile(videoFiles[0]);
+        return;
+      }
+
+      const streamableFiles = videoFiles.filter(isStreamable);
+
+      if (streamableFiles.length === 1) {
+        streamFile(streamableFiles[0]);
         return;
       }
 
@@ -564,6 +601,23 @@
   torrentToggle.addEventListener("click", () => {
     const isOpen = torrentPanel.classList.toggle("is-open");
     torrentToggle.setAttribute("aria-expanded", String(isOpen));
+  });
+
+  torrentClear.addEventListener("click", () => {
+    if (torrentClient) {
+      torrentClient.destroy();
+      torrentClient = null;
+    }
+    stopTorrentPanel();
+    history.replaceState(null, "", window.location.pathname);
+    updateShareHref();
+    player.src = "";
+    player.load();
+    hasLocalVideo = false;
+    setCurrentVideo(null);
+    setRoomVideo(null);
+    setSyncStatus("Waiting for sync");
+    magnetInput.value = "";
   });
 
   filePickerBackdrop.addEventListener("click", () => {
