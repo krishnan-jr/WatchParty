@@ -505,6 +505,32 @@ video {
   display: block;
 }
 
+.torrent-note {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 3px solid var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.torrent-note[data-level="ok"]   { border-left-color: var(--green); }
+.torrent-note[data-level="warn"] { border-left-color: var(--amber); }
+.torrent-note[data-level="err"]  { border-left-color: var(--red); }
+.torrent-note[data-level="info"] { border-left-color: #60a5fa; }
+
+.torrent-note-type {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.torrent-note-approach {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .torrent-name {
   font-size: 12px;
   font-weight: 600;

@@ -24,6 +24,9 @@
   const torrentHealthDot = document.getElementById("torrentHealthDot");
   const torrentHealthLabel = document.getElementById("torrentHealthLabel");
   const torrentInfoName = document.getElementById("torrentInfoName");
+  const torrentNote = document.getElementById("torrentNote");
+  const torrentNoteType = document.getElementById("torrentNoteType");
+  const torrentNoteApproach = document.getElementById("torrentNoteApproach");
   const torrentProgressFill = document.getElementById("torrentProgressFill");
   const torrentProgressLabel = document.getElementById("torrentProgressLabel");
   const tsStat = {
@@ -291,6 +294,45 @@
     return MSE_EXTENSIONS.has(file.name.split(".").pop().toLowerCase());
   }
 
+  // Container → how a browser can handle it. "yes": native + MSE-streamable,
+  // "maybe": streamable only if the inner codec is browser-friendly,
+  // "no": browsers can't decode the container/codecs without transcoding.
+  const PLAYBACK_PROFILES = {
+    mp4: { container: "MP4 (ISO base media)", stream: "yes" },
+    m4v: { container: "MP4 (ISO base media)", stream: "yes" },
+    webm: { container: "WebM", stream: "yes" },
+    ogv: { container: "Ogg", stream: "yes" },
+    ogg: { container: "Ogg", stream: "yes" },
+    mov: { container: "QuickTime (MOV)", stream: "maybe" },
+    mkv: { container: "Matroska (MKV)", stream: "no" },
+    avi: { container: "AVI", stream: "no" },
+    wmv: { container: "Windows Media (WMV)", stream: "no" },
+    flv: { container: "Flash Video (FLV)", stream: "no" },
+    ts: { container: "MPEG-TS", stream: "no" }
+  };
+
+  function describeFile(file) {
+    const ext = file.name.split(".").pop().toLowerCase();
+    const profile = PLAYBACK_PROFILES[ext];
+    return profile
+      ? { ext, container: profile.container, stream: profile.stream }
+      : { ext, container: `${ext.toUpperCase()} container`, stream: "no" };
+  }
+
+  function typeLabel(info) {
+    return {
+      yes: `${info.container} · browser-native & MSE-streamable`,
+      maybe: `${info.container} · streamability depends on its codec`,
+      no: `${info.container} · browsers can't decode this natively`
+    }[info.stream];
+  }
+
+  function setTorrentNote(type, approach, level) {
+    torrentNoteType.textContent = type;
+    torrentNoteApproach.textContent = approach;
+    torrentNote.dataset.level = level;
+  }
+
   const STREAM_MIME = {
     mp4: 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
     m4v: 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
@@ -338,6 +380,11 @@
 
       sb.addEventListener("error", (e) => {
         setSyncStatus("Stream buffer error — format may not be supported");
+        setTorrentNote(
+          typeLabel(describeFile(file)),
+          "MediaSource rejected the stream — your browser can't decode these codecs. Use an MP4 (H.264/AAC) release or transcode it first.",
+          "err"
+        );
       });
 
       const stream = file.createReadStream();
@@ -440,18 +487,31 @@
     clearInterval(torrentUpdateInterval);
     torrentUpdateInterval = null;
     videoBitrate = null;
+    setTorrentNote("Analyzing…", "—", "info");
     torrentPanel.setAttribute("hidden", "");
     torrentPanel.classList.remove("is-open");
     torrentToggle.setAttribute("aria-expanded", "false");
   }
 
   function streamFile(file) {
+    const info = describeFile(file);
+    const type = typeLabel(info);
+
     if (typeof file.renderTo !== "function") {
       setSyncStatus("Torrent streaming unavailable — unsupported WebTorrent version");
+      setTorrentNote(type, "This WebTorrent build can't stream — reload the page to fetch a compatible version.", "err");
       return;
     }
 
     setSyncStatus("Buffering...");
+    setTorrentNote(
+      type,
+      info.stream === "no"
+        ? "Attempting an in-browser stream anyway — this usually needs an MP4/H.264 release or a transcode."
+        : "Starting progressive stream — playing as the torrent downloads…",
+      info.stream === "yes" ? "ok" : info.stream === "maybe" ? "warn" : "err"
+    );
+
     applyingRemoteSync = true;
     hasLocalVideo = true;
     setCurrentVideo(file.name);
@@ -460,28 +520,29 @@
     player.removeAttribute("src");
     player.load();
 
-    try {
-      file.renderTo(player, { autoplay: true }, (err) => {
-        if (err) {
-          if (streamViaMSE(file)) {
-            setSyncStatus("Streaming via chunks...");
-          } else {
-            setSyncStatus("Format not supported for in-browser streaming");
-            hasLocalVideo = false;
-            applyingRemoteSync = false;
-          }
-          return;
-        }
-        setSyncStatus("Stream ready");
-      });
-    } catch (e) {
+    function fallbackToMSE() {
       if (streamViaMSE(file)) {
         setSyncStatus("Streaming via chunks...");
+        setTorrentNote(type, "Playing via manual MediaSource chunk streaming as the torrent downloads.", "ok");
       } else {
         setSyncStatus("Format not supported for in-browser streaming");
+        setTorrentNote(type, "Your browser can't decode this format. Use an MP4 (H.264/AAC) release or transcode it first.", "err");
         hasLocalVideo = false;
         applyingRemoteSync = false;
       }
+    }
+
+    try {
+      file.renderTo(player, { autoplay: true }, (err) => {
+        if (err) {
+          fallbackToMSE();
+          return;
+        }
+        setSyncStatus("Stream ready");
+        setTorrentNote(type, "Playing progressively via WebTorrent's native MediaSource renderer as the torrent downloads.", "ok");
+      });
+    } catch (e) {
+      fallbackToMSE();
     }
 
     player.addEventListener(
@@ -585,6 +646,8 @@
 
       if (videoFiles.length === 0) {
         setSyncStatus("No video files found in torrent");
+        startTorrentPanel(torrent);
+        setTorrentNote("No video files in this torrent", "Nothing to play — check that the magnet points at a video release.", "err");
         return;
       }
 
@@ -602,6 +665,7 @@
         return;
       }
 
+      setTorrentNote(`${videoFiles.length} video files in this torrent`, "Pick a file to start streaming it progressively.", "info");
       showFilePicker(videoFiles);
     });
   }
