@@ -548,8 +548,6 @@
 
   function startTorrentPanel(torrent) {
     torrentPanel.removeAttribute("hidden");
-    torrentPanel.classList.add("is-open");
-    torrentToggle.setAttribute("aria-expanded", "true");
     updateTorrentPanel(torrent);
     torrentUpdateInterval = setInterval(() => updateTorrentPanel(torrent), 1000);
   }
@@ -700,6 +698,12 @@
     });
 
     torrentClient.add(injectWssTrackers(magnetUri.trim()), (torrent) => {
+      // Disable seeding: choke all peers so we never upload pieces.
+      torrent.on("wire", (wire) => {
+        wire.choke();
+        wire.on("interested", () => wire.choke());
+      });
+
       magnetButton.disabled = false;
       magnetButton.textContent = "Stream";
 

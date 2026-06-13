@@ -70,23 +70,37 @@
             </button>
             <p class="torrent-note-approach" id="torrentNoteApproach">—</p>
           </div>
-          <p class="torrent-name" id="torrentInfoName">—</p>
+          <div class="torrent-header-row">
+            <p class="torrent-name" id="torrentInfoName">—</p>
+            <p class="torrent-progress-label" id="torrentProgressLabel">0%</p>
+          </div>
           <div class="torrent-progress-track">
             <div class="torrent-progress-fill" id="torrentProgressFill"></div>
           </div>
-          <p class="torrent-progress-label" id="torrentProgressLabel">0%</p>
           <dl class="torrent-stats">
-            <div class="torrent-stat"><dt>Size</dt><dd id="ts-size">—</dd></div>
-            <div class="torrent-stat"><dt>Remaining</dt><dd id="ts-remaining">—</dd></div>
-            <div class="torrent-stat"><dt>Downloaded</dt><dd id="ts-downloaded">—</dd></div>
-            <div class="torrent-stat"><dt>Uploaded</dt><dd id="ts-uploaded">—</dd></div>
-            <div class="torrent-stat"><dt>Ratio</dt><dd id="ts-ratio">—</dd></div>
-            <div class="torrent-stat torrent-stat--divider"><dt>Peers</dt><dd id="ts-peers">—</dd></div>
-            <div class="torrent-stat"><dt>↓ Speed</dt><dd id="ts-down">—</dd></div>
-            <div class="torrent-stat"><dt>↑ Speed</dt><dd id="ts-up">—</dd></div>
-            <div class="torrent-stat"><dt>ETA</dt><dd id="ts-eta">—</dd></div>
-            <div class="torrent-stat torrent-stat--divider"><dt>Streaming</dt><dd id="ts-streaming">—</dd></div>
-            <div class="torrent-stat"><dt>Status</dt><dd id="ts-status">—</dd></div>
+            <div class="torrent-stat-row">
+              <div class="torrent-stat"><dt>Downloaded</dt><dd id="ts-downloaded">—</dd></div>
+              <div class="torrent-stat"><dt>Uploaded</dt><dd id="ts-uploaded">—</dd></div>
+            </div>
+            <div class="torrent-stat-row">
+              <div class="torrent-stat"><dt>↓ Speed</dt><dd id="ts-down">—</dd></div>
+              <div class="torrent-stat"><dt>↑ Speed</dt><dd id="ts-up">—</dd></div>
+            </div>
+            <div class="torrent-stat-row">
+              <div class="torrent-stat"><dt>ETA</dt><dd id="ts-eta">—</dd></div>
+              <div class="torrent-stat"><dt>Peers</dt><dd id="ts-peers">—</dd></div>
+            </div>
+            <div class="torrent-stat-row">
+              <div class="torrent-stat"><dt>Size</dt><dd id="ts-size">—</dd></div>
+              <div class="torrent-stat"><dt>Remaining</dt><dd id="ts-remaining">—</dd></div>
+            </div>
+            <div class="torrent-stat-row torrent-stat-row--divider">
+              <div class="torrent-stat"><dt>Streaming</dt><dd id="ts-streaming">—</dd></div>
+              <div class="torrent-stat"><dt>Status</dt><dd id="ts-status">—</dd></div>
+            </div>
+            <div class="torrent-stat-row">
+              <div class="torrent-stat torrent-stat--full"><dt>Ratio</dt><dd id="ts-ratio">—</dd></div>
+            </div>
           </dl>
           <button id="torrentClear" class="torrent-clear-btn" type="button">Clear torrent</button>
         </div>

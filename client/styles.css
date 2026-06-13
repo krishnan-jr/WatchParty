@@ -565,6 +565,14 @@ video {
   display: block;
 }
 
+.torrent-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .torrent-name {
   font-size: 12px;
   font-weight: 600;
@@ -572,7 +580,7 @@ video {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 10px;
+  min-width: 0;
 }
 
 .torrent-progress-track {
@@ -580,7 +588,7 @@ video {
   border-radius: 999px;
   background: var(--surface-2);
   overflow: hidden;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .torrent-progress-fill {
@@ -594,31 +602,44 @@ video {
 .torrent-progress-label {
   font-size: 11px;
   color: var(--text-muted);
-  text-align: right;
-  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .torrent-stats {
+  display: flex;
+  flex-direction: column;
+}
+
+.torrent-stat-row {
   display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.torrent-stat-row:last-child {
+  border-bottom: none;
+}
+
+.torrent-stat-row--divider {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
 }
 
 .torrent-stat {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  gap: 6px;
+  padding: 4px 0;
 }
 
-.torrent-stat:last-child {
-  border-bottom: none;
+.torrent-stat-row .torrent-stat + .torrent-stat {
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.torrent-stat--divider {
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
+.torrent-stat--full {
+  grid-column: 1 / -1;
 }
 
 .torrent-stat dt {
