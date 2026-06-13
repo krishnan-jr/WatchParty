@@ -1,14 +1,19 @@
-const SYNC_INTERVAL_MS = 2500;
+const SYNC_INTERVAL_MS = 1000;
 globalThis.WATCH_PARTY_LOGGING = process.env.DISABLE_LOGS !== true && process.env.DISABLE_LOGS !== "true";
 
-const state = {
-  currentTime: 0,
-  isPlaying: false,
-  lastUpdateTimestamp: Date.now(),
+// Authoritative-but-cooperative room state. The playback clock only advances
+// while `playing` AND nobody is buffering — the moment any client stalls we
+// freeze it (re-anchor) so the rest "wait for the slowest", then resume from
+// the frozen point once everyone recovers.
+const room = {
+  position: 0, // playback seconds captured at `anchor`
+  playing: false, // user-intended play state
+  anchor: Date.now(), // server clock (ms) when `position` was captured
   mediaName: null
 };
 
 const clients = new Map();
+const buffering = new Set();
 
 function now() {
   return Date.now();
@@ -29,15 +34,6 @@ function formatPayload(payload) {
       key.toLowerCase().includes("time") ? roundSeconds(value) : value
     ])
   );
-}
-
-function formatState(snapshot = getProjectedState()) {
-  return {
-    time: roundSeconds(snapshot.time),
-    isPlaying: snapshot.isPlaying,
-    timestamp: snapshot.timestamp,
-    mediaName: snapshot.mediaName
-  };
 }
 
 function logSocket(message, details = {}) {
@@ -84,124 +80,113 @@ function broadcastClients(io) {
   io.emit("clients", getClientList());
 }
 
-function getProjectedState() {
-  if (!state.isPlaying) {
-    return {
-      time: state.currentTime,
-      isPlaying: state.isPlaying,
-      timestamp: state.lastUpdateTimestamp,
-      mediaName: state.mediaName
-    };
-  }
+// Is the room's clock actually advancing right now?
+function isLive() {
+  return room.playing && buffering.size === 0;
+}
 
-  const elapsedSeconds = (now() - state.lastUpdateTimestamp) / 1000;
+// Current playback position under the live/frozen rule.
+function position() {
+  if (!isLive()) {
+    return room.position;
+  }
+  return room.position + (now() - room.anchor) / 1000;
+}
+
+// Capture the current position and reset the anchor. MUST be called before any
+// change to `playing` or the `buffering` set so the captured position reflects
+// the rate that applied up to this instant.
+function reanchor() {
+  room.position = Math.max(0, position());
+  room.anchor = now();
+}
+
+function syncPayload() {
   return {
-    time: state.currentTime + elapsedSeconds,
-    isPlaying: state.isPlaying,
-    timestamp: state.lastUpdateTimestamp,
-    mediaName: state.mediaName
+    position: roundSeconds(position()),
+    playing: room.playing,
+    waiting: buffering.size > 0,
+    serverTime: now(),
+    mediaName: room.mediaName
   };
 }
 
-function applyAction(action, payload) {
-  const incoming = formatPayload(payload);
+function broadcastSync(io) {
+  const payload = syncPayload();
+  logSocket("broadcast sync", { payload });
+  io.emit("sync", payload);
+}
 
-  if (!payload || typeof payload.time !== "number" || typeof payload.timestamp !== "number") {
-    logSocket(`reject ${action}`, {
-      reason: "payload must include numeric time and timestamp",
-      payload: incoming,
-      state: formatState()
-    });
+function applyAction(type, payload) {
+  if (!payload || typeof payload.time !== "number") {
+    logSocket(`reject ${type}`, { reason: "payload must include numeric time", payload: formatPayload(payload) });
     return false;
   }
 
-  if (payload.timestamp < state.lastUpdateTimestamp) {
-    logSocket(`reject ${action}`, {
-      reason: "stale timestamp",
-      payload: incoming,
-      state: formatState()
-    });
-    return false;
+  room.position = Math.max(0, payload.time);
+  room.anchor = now();
+  if (type === "play") {
+    room.playing = true;
+  } else if (type === "pause") {
+    room.playing = false;
   }
+  // "seek" keeps the current play/pause state, just repositions.
 
-  state.currentTime = Math.max(0, payload.time);
-  state.isPlaying = action === "play";
-  state.lastUpdateTimestamp = payload.timestamp;
-  logSocket(`apply ${action}`, {
-    payload: incoming,
-    state: formatState({
-      time: state.currentTime,
-      isPlaying: state.isPlaying,
-      timestamp: state.lastUpdateTimestamp,
-      mediaName: state.mediaName
-    })
-  });
+  logSocket(`apply ${type}`, { payload: formatPayload(payload), state: syncPayload() });
   return true;
 }
 
-function broadcastSync(io) {
-  const projected = getProjectedState();
-  logSocket("broadcast sync", {
-    state: formatState(projected)
-  });
-  io.emit("sync", projected);
+function setBuffering(io, socketId, stalled) {
+  const heldBefore = buffering.size > 0;
+  reanchor(); // freeze position under the current rate before changing the set
+  if (stalled) {
+    buffering.add(socketId);
+  } else {
+    buffering.delete(socketId);
+  }
+  const heldAfter = buffering.size > 0;
+
+  logSocket("buffering change", { socketId, stalled, buffering: buffering.size, state: syncPayload() });
+
+  if (heldBefore !== heldAfter) {
+    broadcastSync(io); // room hold state flipped — tell everyone to wait / resume
+  }
 }
 
 function resetPlayback(io, videoName) {
-  state.currentTime = 0;
-  state.isPlaying = false;
-  state.lastUpdateTimestamp = now();
-  logSocket("reset playback", {
-    videoName,
-    state: formatState({
-      time: state.currentTime,
-      isPlaying: state.isPlaying,
-      timestamp: state.lastUpdateTimestamp,
-      mediaName: state.mediaName
-    })
-  });
-  io.emit("videoChanged", {
-    name: videoName,
-    timestamp: state.lastUpdateTimestamp
-  });
+  room.position = 0;
+  room.playing = false;
+  room.anchor = now();
+  buffering.clear();
+  logSocket("reset playback", { videoName, state: syncPayload() });
+  io.emit("videoChanged", { name: videoName, timestamp: now() });
   broadcastSync(io);
 }
 
 function broadcastSubtitle(io, subtitleName) {
-  logSocket("broadcast subtitle changed", {
-    subtitleName
-  });
-  io.emit("subtitleChanged", {
-    name: subtitleName,
-    timestamp: now()
-  });
+  logSocket("broadcast subtitle changed", { subtitleName });
+  io.emit("subtitleChanged", { name: subtitleName, timestamp: now() });
 }
 
 function setMedia(payload) {
-  const incoming = formatPayload(payload);
-
   if (!payload || typeof payload.name !== "string") {
-    logSocket("reject media", {
-      reason: "payload must include string name",
-      payload: incoming,
-      state: formatState()
-    });
+    logSocket("reject media", { reason: "payload must include string name", payload: formatPayload(payload) });
     return false;
   }
 
-  state.mediaName = payload.name;
-  state.currentTime = 0;
-  state.isPlaying = false;
-  state.lastUpdateTimestamp = now();
-  logSocket("apply media", {
-    payload: incoming,
-    state: formatState({
-      time: state.currentTime,
-      isPlaying: state.isPlaying,
-      timestamp: state.lastUpdateTimestamp,
-      mediaName: state.mediaName
-    })
-  });
+  // Same content → a viewer (re)joined; keep the room's position so we don't
+  // yank everyone back to the start. Only genuinely new media resets playback.
+  if (payload.name === room.mediaName) {
+    logSocket("media rejoin", { payload: formatPayload(payload), state: syncPayload() });
+    return true;
+  }
+
+  room.mediaName = payload.name;
+  room.position = 0;
+  room.playing = false;
+  room.anchor = now();
+  buffering.clear();
+  logSocket("apply media", { payload: formatPayload(payload), state: syncPayload() });
   return true;
 }
 
@@ -213,84 +198,57 @@ function configureSocket(io) {
     };
 
     clients.set(socket.id, client);
-    logSocket("client connected", {
-      client,
-      totalClients: clients.size,
-      state: formatState()
-    });
+    logSocket("client connected", { client, totalClients: clients.size, state: syncPayload() });
 
-    socket.emit("sync", getProjectedState());
+    socket.emit("sync", syncPayload());
     socket.emit("clients", getClientList());
     broadcastClients(io);
 
+    socket.on("clockPing", (payload) => {
+      socket.emit("clockPong", { t0: payload && payload.t0, serverTs: now() });
+    });
+
     socket.on("play", (payload) => {
-      logSocket("event play", {
-        socketId: socket.id,
-        payload: formatPayload(payload)
-      });
       if (applyAction("play", payload)) {
         broadcastSync(io);
       }
     });
 
     socket.on("pause", (payload) => {
-      logSocket("event pause", {
-        socketId: socket.id,
-        payload: formatPayload(payload)
-      });
       if (applyAction("pause", payload)) {
         broadcastSync(io);
       }
     });
 
     socket.on("seek", (payload) => {
-      const action = state.isPlaying ? "play" : "pause";
-      logSocket("event seek", {
-        socketId: socket.id,
-        mappedAction: action,
-        payload: formatPayload(payload)
-      });
-      if (applyAction(action, payload)) {
+      if (applyAction("seek", payload)) {
         broadcastSync(io);
       }
     });
 
+    socket.on("buffering", (payload) => {
+      setBuffering(io, socket.id, !!(payload && payload.state));
+    });
+
     socket.on("media", (payload) => {
-      logSocket("event media", {
-        socketId: socket.id,
-        payload: formatPayload(payload)
-      });
       if (setMedia(payload)) {
-        io.emit("mediaChanged", {
-          name: state.mediaName,
-          timestamp: state.lastUpdateTimestamp
-        });
+        io.emit("mediaChanged", { name: room.mediaName, timestamp: room.anchor });
         broadcastSync(io);
       }
     });
 
     socket.on("disconnect", () => {
       clients.delete(socket.id);
-      logSocket("client disconnected", {
-        socketId: socket.id,
-        totalClients: clients.size
-      });
+      if (buffering.has(socket.id)) {
+        // A stalled client left — unfreeze the room if it was the blocker.
+        setBuffering(io, socket.id, false);
+      }
+      logSocket("client disconnected", { socketId: socket.id, totalClients: clients.size });
       broadcastClients(io);
     });
   });
 
   setInterval(() => {
-    const projected = getProjectedState();
-    state.currentTime = projected.time;
-    state.lastUpdateTimestamp = now();
-    logSocket("sync interval tick", {
-      state: formatState({
-        time: state.currentTime,
-        isPlaying: state.isPlaying,
-        timestamp: state.lastUpdateTimestamp,
-        mediaName: state.mediaName
-      })
-    });
     broadcastSync(io);
   }, SYNC_INTERVAL_MS);
 }

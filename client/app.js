@@ -1,8 +1,11 @@
 (function () {
   window.WATCH_PARTY_LOGGING = true;
 
-  const DRIFT_THRESHOLD_SECONDS = 0.3;
+  const IN_SYNC_SECONDS = 0.15; // within this, treat as perfectly in sync
+  const SOFT_SYNC_SECONDS = 1.0; // up to this gap, converge via playbackRate
+  const MAX_RATE_DELTA = 0.1; // cap the gentle nudge at ±10%
   const SEEK_DEBOUNCE_MS = 300;
+  const CLOCK_PING_INTERVAL_MS = 10000;
 
   const player = document.getElementById("player");
   const currentVideoName = document.getElementById("currentVideoName");
@@ -61,6 +64,11 @@
   let torrentClient = null;
   let torrentUpdateInterval = null;
   let videoBitrate = null;
+  let clockOffset = 0; // serverClock − clientClock, ms
+  let bestClockRtt = Infinity;
+  let roomPlaying = false;
+  let selfBuffering = false;
+  let syncGuardTimer = null;
 
   function roundSeconds(value) {
     return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(3)) : value;
@@ -156,12 +164,87 @@
     socket.emit(eventName, payload);
   }
 
-  function getServerTime(sync) {
-    if (!sync.isPlaying) {
-      return sync.time;
-    }
+  // ── Sync engine ───────────────────────────────────────────────────────
+  // The server broadcasts the room's position + play state and freezes that
+  // clock whenever ANY client is buffering ("wait for the slowest"). We never
+  // hard-snap during normal playback — we glide into sync by nudging
+  // playbackRate — and only seek on a large gap or an explicit user seek. A
+  // clock-offset estimate keeps cross-device extrapolation accurate.
 
-    return sync.time + (Date.now() - sync.timestamp) / 1000;
+  function serverNow() {
+    return Date.now() + clockOffset;
+  }
+
+  function pingClock() {
+    socket.emit("clockPing", { t0: Date.now() });
+  }
+
+  function withSyncGuard(action) {
+    applyingRemoteSync = true;
+    action();
+    window.clearTimeout(syncGuardTimer);
+    syncGuardTimer = window.setTimeout(() => {
+      applyingRemoteSync = false;
+    }, 250);
+  }
+
+  function guardedPlay() {
+    if (!player.paused) {
+      return;
+    }
+    withSyncGuard(() => {
+      const promise = player.play();
+      if (promise && typeof promise.catch === "function") {
+        promise.catch(() => setSyncStatus("Tap play to join the sync"));
+      }
+    });
+  }
+
+  function guardedPause() {
+    if (player.paused) {
+      return;
+    }
+    withSyncGuard(() => player.pause());
+  }
+
+  function guardedSeek(target) {
+    const clamped = Math.min(Math.max(0, target), player.duration || target);
+    withSyncGuard(() => {
+      player.currentTime = clamped;
+    });
+  }
+
+  function setRate(rate) {
+    const next = Number(rate.toFixed(3));
+    if (player.playbackRate !== next) {
+      player.playbackRate = next;
+    }
+  }
+
+  function isBuffered(time) {
+    const ranges = player.buffered;
+    for (let i = 0; i < ranges.length; i += 1) {
+      if (time >= ranges.start(i) - 0.25 && time <= ranges.end(i) + 0.25) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function signalBuffering(state) {
+    if (selfBuffering === state) {
+      return;
+    }
+    selfBuffering = state;
+    logWatchParty("signal buffering", { state });
+    socket.emit("buffering", { state });
+  }
+
+  function targetPosition(sync) {
+    if (!sync.playing || sync.waiting) {
+      return sync.position;
+    }
+    return sync.position + (serverNow() - sync.serverTime) / 1000;
   }
 
   function canApplyPlaybackSync() {
@@ -169,89 +252,101 @@
   }
 
   function applySync(sync) {
-    logWatchParty("receive sync", {
-      sync: formatPayload(sync),
-      player: getPlayerSnapshot()
-    });
+    logWatchParty("receive sync", { sync: formatPayload(sync), player: getPlayerSnapshot() });
 
-    if (!sync || typeof sync.time !== "number" || typeof sync.isPlaying !== "boolean") {
-      logWatchParty("reject sync", {
-        reason: "sync must include numeric time and boolean isPlaying",
-        sync: formatPayload(sync)
-      });
+    if (!sync || typeof sync.position !== "number" || typeof sync.playing !== "boolean") {
+      logWatchParty("reject sync", { reason: "sync must include numeric position and boolean playing", sync });
       return;
     }
 
     lastSync = sync;
+    roomPlaying = sync.playing;
 
     if (sync.mediaName) {
       setRoomVideo(sync.mediaName);
     }
 
     if (!canApplyPlaybackSync()) {
-      logWatchParty("defer sync", {
-        reason: "local video metadata is not ready",
-        sync: formatPayload(sync),
-        player: getPlayerSnapshot()
-      });
       setSyncStatus(sync.mediaName ? "Choose your local copy" : "Choose local video");
       return;
     }
 
-    const serverTime = Math.max(0, getServerTime(sync));
-    const drift = Math.abs(player.currentTime - serverTime);
-    const shouldSeek = drift > DRIFT_THRESHOLD_SECONDS && Number.isFinite(serverTime);
+    // Room is held while someone buffers — wait for the slowest viewer.
+    if (sync.waiting) {
+      setRate(1);
+      if (selfBuffering) {
+        setSyncStatus("Buffering…");
+      } else {
+        guardedPause();
+        setSyncStatus("Waiting for the other viewer…");
+      }
+      return;
+    }
+
+    // Match the room's play/pause intent.
+    if (sync.playing) {
+      guardedPlay();
+    } else {
+      guardedPause();
+    }
+
+    const target = Math.max(0, targetPosition(sync));
+    const drift = player.currentTime - target; // + ahead, − behind
+    const adrift = Math.abs(drift);
 
     logWatchParty("drift check", {
       localTime: roundSeconds(player.currentTime),
-      serverTime: roundSeconds(serverTime),
+      target: roundSeconds(target),
       drift: roundSeconds(drift),
-      threshold: DRIFT_THRESHOLD_SECONDS,
-      shouldSeek,
-      sync: formatPayload(sync)
+      playing: sync.playing,
+      offsetMs: Math.round(clockOffset)
     });
 
-    applyingRemoteSync = true;
-
-    if (shouldSeek) {
-      logWatchParty("apply remote seek", {
-        from: roundSeconds(player.currentTime),
-        to: roundSeconds(Math.min(serverTime, player.duration || serverTime)),
-        duration: roundSeconds(player.duration)
-      });
-      player.currentTime = Math.min(serverTime, player.duration || serverTime);
+    // While paused, align quietly — a seek while paused isn't a visible jump.
+    if (!sync.playing) {
+      setRate(1);
+      if (adrift > IN_SYNC_SECONDS && isBuffered(target)) {
+        guardedSeek(target);
+      }
+      setSyncStatus("Paused, in sync");
+      return;
     }
 
-    const playPromise = sync.isPlaying && player.paused ? player.play() : null;
-    if (!sync.isPlaying) {
-      logWatchParty("apply remote pause", {
-        player: getPlayerSnapshot()
-      });
-      player.pause();
-    } else if (playPromise) {
-      logWatchParty("apply remote play", {
-        player: getPlayerSnapshot()
-      });
+    if (adrift <= IN_SYNC_SECONDS) {
+      setRate(1);
+      setSyncStatus("In sync");
+      return;
     }
 
-    if (playPromise && typeof playPromise.catch === "function") {
-      playPromise.catch((error) => {
-        logWatchParty("remote play blocked", {
-          message: error && error.message,
-          player: getPlayerSnapshot()
-        });
-        setSyncStatus("Tap play to allow synced playback");
-      });
+    if (drift > 0) {
+      // Ahead of the room — slow down to let it catch up (always safe).
+      if (adrift <= SOFT_SYNC_SECONDS) {
+        setRate(1 - Math.min(MAX_RATE_DELTA, drift * 0.3));
+        setSyncStatus(`Soft-syncing +${drift.toFixed(2)}s`);
+      } else {
+        guardedSeek(target);
+        setRate(1);
+        setSyncStatus("Re-synced");
+      }
+      return;
     }
 
-    window.setTimeout(() => {
-      applyingRemoteSync = false;
-      logWatchParty("remote sync guard released", {
-        player: getPlayerSnapshot()
-      });
-    }, 100);
-
-    setSyncStatus(`Synced, drift ${drift.toFixed(2)}s`);
+    // Behind the room.
+    if (isBuffered(target)) {
+      if (adrift <= SOFT_SYNC_SECONDS) {
+        setRate(1 + Math.min(MAX_RATE_DELTA, adrift * 0.3));
+        setSyncStatus(`Soft-syncing −${adrift.toFixed(2)}s`);
+      } else {
+        guardedSeek(target);
+        setRate(1);
+        setSyncStatus("Re-synced");
+      }
+    } else {
+      // We lack the data ahead — let the natural stall raise `waiting`, which
+      // signals buffering and holds the room for us. Don't snap into the void.
+      setRate(1);
+      setSyncStatus("Buffering to catch up…");
+    }
   }
 
   function convertSrtToVtt(content) {
@@ -679,6 +774,10 @@
       player: getPlayerSnapshot()
     });
     setConnectionStatus("Connected");
+    bestClockRtt = Infinity;
+    for (let i = 0; i < 5; i += 1) {
+      window.setTimeout(pingClock, i * 200);
+    }
     if (lastSync) {
       applySync(lastSync);
     }
@@ -699,6 +798,21 @@
   });
 
   socket.on("sync", applySync);
+
+  // NTP-lite clock offset: keep the sample with the lowest round-trip, since
+  // that one was least distorted by network jitter.
+  socket.on("clockPong", (message) => {
+    if (!message || typeof message.t0 !== "number" || typeof message.serverTs !== "number") {
+      return;
+    }
+    const t3 = Date.now();
+    const rtt = t3 - message.t0;
+    if (rtt < bestClockRtt) {
+      bestClockRtt = rtt;
+      clockOffset = message.serverTs - (message.t0 + t3) / 2;
+      logWatchParty("clock offset updated", { offsetMs: Math.round(clockOffset), rttMs: rtt });
+    }
+  });
 
   socket.on("clients", (clients) => {
     logWatchParty("receive clients", {
@@ -903,10 +1017,16 @@
   });
 
   player.addEventListener("waiting", () => {
-    logWatchParty("player waiting", {
-      player: getPlayerSnapshot()
-    });
-    setSyncStatus("Buffering local file");
+    logWatchParty("player waiting", { player: getPlayerSnapshot() });
+    if (hasLocalVideo && (roomPlaying || !player.paused)) {
+      signalBuffering(true); // hold the room until we recover
+    }
+    setSyncStatus("Buffering…");
+  });
+
+  player.addEventListener("playing", () => {
+    logWatchParty("player playing", { player: getPlayerSnapshot() });
+    signalBuffering(false);
   });
 
   player.addEventListener("canplay", () => {
@@ -914,6 +1034,7 @@
       hasLastSync: Boolean(lastSync),
       player: getPlayerSnapshot()
     });
+    signalBuffering(false);
     if (lastSync) {
       applySync(lastSync);
     }
@@ -927,4 +1048,5 @@
   }
 
   loadShareLink().catch(() => {});
+  window.setInterval(pingClock, CLOCK_PING_INTERVAL_MS);
 })();
