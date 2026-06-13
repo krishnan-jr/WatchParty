@@ -29,7 +29,10 @@
       </header>
 
       <div class="magnet-drawer" id="magnetDrawer" hidden>
-        <input id="magnetInput" class="magnet-input" type="text" placeholder="magnet:?xt=urn:btih:…" autocomplete="off" spellcheck="false">
+        <div class="magnet-input-wrap">
+          <input id="magnetInput" class="magnet-input" type="text" placeholder="magnet:?xt=urn:btih:…" autocomplete="off" spellcheck="false">
+          <button id="magnetClear" class="magnet-clear-btn" type="button" aria-label="Clear" hidden>✕</button>
+        </div>
         <button id="magnetButton" class="btn btn--primary" type="button">Stream</button>
       </div>
 

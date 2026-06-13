@@ -13,6 +13,7 @@
   const magnetToggle = document.getElementById("magnetToggle");
   const magnetDrawer = document.getElementById("magnetDrawer");
   const magnetInput = document.getElementById("magnetInput");
+  const magnetClear = document.getElementById("magnetClear");
   const magnetButton = document.getElementById("magnetButton");
   const filePicker = document.getElementById("filePicker");
   const filePickerBackdrop = document.getElementById("filePickerBackdrop");
@@ -474,6 +475,7 @@
 
     history.replaceState(null, "", "#" + encodeURIComponent(magnetUri.trim()));
     magnetInput.value = magnetUri.trim();
+    magnetClear.hidden = false;
     updateShareHref();
 
     setSyncStatus("Finding peers...");
@@ -634,6 +636,16 @@
     if (!nowHidden) {
       magnetInput.focus();
     }
+  });
+
+  magnetInput.addEventListener("input", () => {
+    magnetClear.hidden = !magnetInput.value;
+  });
+
+  magnetClear.addEventListener("click", () => {
+    magnetInput.value = "";
+    magnetClear.hidden = true;
+    magnetInput.focus();
   });
 
   magnetButton.addEventListener("click", () => {
