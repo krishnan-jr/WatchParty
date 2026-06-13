@@ -25,6 +25,11 @@ app.put("/subtitles/active", (req, res) =>
 );
 app.get("/subtitle", streamSubtitle);
 app.get("/tunnel", async (req, res) => {
+  if (process.env.RENDER_EXTERNAL_URL) {
+    res.json({ url: process.env.RENDER_EXTERNAL_URL });
+    return;
+  }
+
   try {
     const response = await fetch("http://127.0.0.1:4040/api/tunnels");
     const data = await response.json();
