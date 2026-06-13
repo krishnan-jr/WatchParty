@@ -321,7 +321,7 @@
 
   function typeLabel(info) {
     return {
-      yes: `${info.container} · browser-native & MSE-streamable`,
+      yes: `${info.container} · typically browser-playable`,
       maybe: `${info.container} · streamability depends on its codec`,
       no: `${info.container} · browsers can't decode this natively`
     }[info.stream];
@@ -333,75 +333,50 @@
     torrentNote.dataset.level = level;
   }
 
-  const STREAM_MIME = {
-    mp4: 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
-    m4v: 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
-    webm: 'video/webm; codecs="vp8, vorbis"',
-    ogg: 'video/ogg; codecs="theora, vorbis"'
-  };
+  // Fallback when renderTo can't progressively stream the file (e.g. a
+  // non-fragmented MP4, which MediaSource can't decode incrementally). Download
+  // the whole file, then hand the browser a Blob URL so its native demuxer plays
+  // it. If even that can't decode (e.g. HEVC/H.265, AC3 audio), report honestly.
+  function playViaBlob(file, type) {
+    setSyncStatus("Can't stream — downloading full file…");
+    setTorrentNote(
+      type,
+      "Can't stream this file incrementally (likely a non-fragmented MP4). Downloading it in full — it'll play once complete; watch the progress below.",
+      "warn"
+    );
 
-  function streamViaMSE(file) {
-    const ext = file.name.split(".").pop().toLowerCase();
-    const mimeType = STREAM_MIME[ext];
-    if (!mimeType || !MediaSource.isTypeSupported(mimeType)) return false;
-
-    const mediaSource = new MediaSource();
-    player.src = URL.createObjectURL(mediaSource);
-    player.load();
-
-    mediaSource.addEventListener("sourceopen", () => {
-      let sb;
-      try {
-        sb = mediaSource.addSourceBuffer(mimeType);
-      } catch (e) {
-        setSyncStatus("Format not supported for streaming");
+    file.getBlobURL((err, url) => {
+      if (err) {
+        logWatchParty("getBlobURL failed", { message: err && err.message, name: file.name });
+        setSyncStatus("Couldn't load this video");
+        setTorrentNote(type, "Failed to download the file for playback.", "err");
+        hasLocalVideo = false;
+        applyingRemoteSync = false;
         return;
       }
 
-      const queue = [];
-      let appending = false;
-      let streamDone = false;
+      player.addEventListener(
+        "error",
+        () => {
+          logWatchParty("blob playback failed", { name: file.name });
+          setSyncStatus("Couldn't decode this video");
+          setTorrentNote(
+            type,
+            "Your browser can't decode this file's codec (often HEVC/H.265 video or AC3 audio). Use an H.264/AAC release or transcode it first.",
+            "err"
+          );
+          hasLocalVideo = false;
+          applyingRemoteSync = false;
+        },
+        { once: true }
+      );
 
-      function flush() {
-        if (appending || queue.length === 0) {
-          if (streamDone && !appending && mediaSource.readyState === "open") {
-            mediaSource.endOfStream();
-          }
-          return;
-        }
-        appending = true;
-        sb.appendBuffer(queue.shift());
-      }
-
-      sb.addEventListener("updateend", () => {
-        appending = false;
-        flush();
-      });
-
-      sb.addEventListener("error", (e) => {
-        setSyncStatus("Stream buffer error — format may not be supported");
-        setTorrentNote(
-          typeLabel(describeFile(file)),
-          "MediaSource rejected the stream — your browser can't decode these codecs. Use an MP4 (H.264/AAC) release or transcode it first.",
-          "err"
-        );
-      });
-
-      const stream = file.createReadStream();
-      stream.on("data", (chunk) => {
-        queue.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
-        flush();
-      });
-      stream.on("end", () => {
-        streamDone = true;
-        flush();
-      });
-      stream.on("error", (err) => {
-        setSyncStatus("Stream error: " + err.message);
-      });
-    }, { once: true });
-
-    return true;
+      player.src = url;
+      player.load();
+      player.play().catch(() => {});
+      setSyncStatus("Playing downloaded file");
+      setTorrentNote(type, "Couldn't stream incrementally, so the full file was downloaded and is now playing.", "ok");
+    });
   }
 
   function formatBytes(bytes) {
@@ -520,29 +495,19 @@
     player.removeAttribute("src");
     player.load();
 
-    function fallbackToMSE() {
-      if (streamViaMSE(file)) {
-        setSyncStatus("Streaming via chunks...");
-        setTorrentNote(type, "Playing via manual MediaSource chunk streaming as the torrent downloads.", "ok");
-      } else {
-        setSyncStatus("Format not supported for in-browser streaming");
-        setTorrentNote(type, "Your browser can't decode this format. Use an MP4 (H.264/AAC) release or transcode it first.", "err");
-        hasLocalVideo = false;
-        applyingRemoteSync = false;
-      }
-    }
-
     try {
       file.renderTo(player, { autoplay: true }, (err) => {
         if (err) {
-          fallbackToMSE();
+          logWatchParty("renderTo failed", { message: err && err.message, name: file.name });
+          playViaBlob(file, type);
           return;
         }
         setSyncStatus("Stream ready");
         setTorrentNote(type, "Playing progressively via WebTorrent's native MediaSource renderer as the torrent downloads.", "ok");
       });
     } catch (e) {
-      fallbackToMSE();
+      logWatchParty("renderTo threw", { message: e && e.message, name: file.name });
+      playViaBlob(file, type);
     }
 
     player.addEventListener(
