@@ -25,6 +25,7 @@
   const torrentHealthLabel = document.getElementById("torrentHealthLabel");
   const torrentInfoName = document.getElementById("torrentInfoName");
   const torrentNote = document.getElementById("torrentNote");
+  const torrentNoteToggle = document.getElementById("torrentNoteToggle");
   const torrentNoteType = document.getElementById("torrentNoteType");
   const torrentNoteApproach = document.getElementById("torrentNoteApproach");
   const torrentProgressFill = document.getElementById("torrentProgressFill");
@@ -724,6 +725,11 @@
   torrentToggle.addEventListener("click", () => {
     const isOpen = torrentPanel.classList.toggle("is-open");
     torrentToggle.setAttribute("aria-expanded", String(isOpen));
+  });
+
+  torrentNoteToggle.addEventListener("click", () => {
+    const isOpen = torrentNote.classList.toggle("is-open");
+    torrentNoteToggle.setAttribute("aria-expanded", String(isOpen));
   });
 
   torrentClear.addEventListener("click", () => {

@@ -64,7 +64,10 @@
         </button>
         <div class="torrent-info" id="torrentInfo">
           <div class="torrent-note" id="torrentNote" data-level="info">
-            <p class="torrent-note-type" id="torrentNoteType">Analyzing…</p>
+            <button class="torrent-note-toggle" id="torrentNoteToggle" type="button" aria-expanded="false" aria-controls="torrentNoteApproach">
+              <span class="torrent-note-type" id="torrentNoteType">Analyzing…</span>
+              <span class="torrent-note-caret" aria-hidden="true">▾</span>
+            </button>
             <p class="torrent-note-approach" id="torrentNoteApproach">—</p>
           </div>
           <p class="torrent-name" id="torrentInfoName">—</p>
