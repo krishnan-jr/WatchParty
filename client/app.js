@@ -662,7 +662,156 @@
     filePicker.removeAttribute("hidden");
   }
 
-  function loadMagnet(magnetUri) {
+  // --- Persistent torrent storage (IndexedDB) -----------------------------
+  // Browser WebTorrent defaults to an in-memory chunk store, so a page refresh
+  // drops every downloaded piece and the torrent restarts from zero. Backing it
+  // with idb-chunk-store writes pieces to IndexedDB (on disk, not RAM), keyed by
+  // infohash, so re-adding the same magnet verifies the cached pieces and
+  // resumes instead of re-downloading. Loaded as an ESM bundle on first use.
+  let chunkStoreModule = null;
+  function loadChunkStore() {
+    if (!chunkStoreModule) {
+      chunkStoreModule = import(
+        "https://cdn.jsdelivr.net/npm/idb-chunk-store@1.0.1/+esm"
+      ).then((m) => m.default);
+    }
+    return chunkStoreModule;
+  }
+
+  function magnetInfoHash(magnetUri) {
+    const match = magnetUri.match(/urn:btih:([^&]+)/i);
+    return match ? match[1].toLowerCase() : null;
+  }
+
+  // Request durable storage (so the browser won't evict the cache under disk
+  // pressure) and return a chunk-store factory keyed to this torrent's
+  // infohash. Returns null to fall back to the default in-memory store when
+  // IndexedDB is unavailable or the module fails to load.
+  async function prepareChunkStore(infoHash) {
+    if (!infoHash || !navigator.storage) return null;
+    try {
+      if (navigator.storage.persist) {
+        const persisted = await navigator.storage.persist();
+        logWatchParty("storage.persist", { persisted });
+      }
+      const IdbChunkStore = await loadChunkStore();
+      touchCache(infoHash);
+      return function (chunkLength, storeOpts) {
+        return new IdbChunkStore(
+          chunkLength,
+          Object.assign({}, storeOpts, { name: infoHash })
+        );
+      };
+    } catch (e) {
+      logWatchParty("idb-chunk-store unavailable, using memory store", {
+        message: e && e.message
+      });
+      return null;
+    }
+  }
+
+  // Once metadata arrives we know the real file size; warn if the browser's
+  // storage quota can't hold it, since the cache won't survive a refresh then.
+  async function warnIfStorageShort(torrent) {
+    if (!navigator.storage || !navigator.storage.estimate || !torrent.length) return;
+    try {
+      const { quota, usage } = await navigator.storage.estimate();
+      const free = (quota || 0) - (usage || 0);
+      logWatchParty("storage.estimate", { quota, usage, free, needed: torrent.length });
+      if (free < torrent.length) {
+        setTorrentNote(
+          torrent.name || "Low storage",
+          `This file is ${formatBytes(torrent.length)} but only ${formatBytes(free)} of ` +
+            "browser storage is free. It may not fully cache, and progress could be lost on refresh.",
+          "warn"
+        );
+      }
+    } catch (e) {
+      logWatchParty("storage.estimate failed", { message: e && e.message });
+    }
+  }
+
+  // --- Cache cleanup ------------------------------------------------------
+  // idb-chunk-store names its IndexedDB database after the infohash we pass, so
+  // each torrent's cache is exactly one database. IndexedDB exposes no
+  // creation/last-used time, so we track that in a small localStorage registry
+  // and delete databases by infohash. Deletes run fire-and-forget — they're
+  // housekeeping and must never block playback.
+  const CACHE_REGISTRY_KEY = "wp:torrentCache";
+  const CACHE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+  let activeInfoHash = null;
+
+  function readCacheRegistry() {
+    try {
+      return JSON.parse(localStorage.getItem(CACHE_REGISTRY_KEY)) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function writeCacheRegistry(reg) {
+    try {
+      localStorage.setItem(CACHE_REGISTRY_KEY, JSON.stringify(reg));
+    } catch (e) {
+      logWatchParty("cache registry write failed", { message: e && e.message });
+    }
+  }
+
+  function touchCache(infoHash) {
+    if (!infoHash) return;
+    const reg = readCacheRegistry();
+    reg[infoHash] = Date.now();
+    writeCacheRegistry(reg);
+  }
+
+  function deleteIdbDatabase(name) {
+    return new Promise((resolve) => {
+      if (!window.indexedDB) return resolve();
+      try {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = () => resolve();
+        req.onblocked = () => {
+          logWatchParty("idb delete blocked — completes once connections close", { name });
+          resolve();
+        };
+      } catch (e) {
+        logWatchParty("idb delete threw", { name, message: e && e.message });
+        resolve();
+      }
+    });
+  }
+
+  // Delete one torrent's cached pieces and drop it from the registry.
+  async function deleteCache(infoHash) {
+    if (!infoHash) return;
+    const reg = readCacheRegistry();
+    delete reg[infoHash];
+    writeCacheRegistry(reg);
+    await deleteIdbDatabase(infoHash);
+    logWatchParty("cache deleted", { infoHash });
+  }
+
+  // New file loaded: drop every cached torrent except the one we're about to
+  // use. Pass null to drop all of them (e.g. switching to a local file).
+  async function purgeCachesExcept(keepInfoHash) {
+    for (const infoHash of Object.keys(readCacheRegistry())) {
+      if (infoHash !== keepInfoHash) await deleteCache(infoHash);
+    }
+  }
+
+  // Startup housekeeping: evict caches not used in the last 3 days, but never
+  // keepInfoHash — that's the cache we're about to resume, and deleting it
+  // mid-open would race with the torrent re-attaching to it.
+  async function evictStaleCaches(keepInfoHash) {
+    const reg = readCacheRegistry();
+    const now = Date.now();
+    for (const infoHash of Object.keys(reg)) {
+      if (infoHash === keepInfoHash) continue;
+      if (now - reg[infoHash] > CACHE_MAX_AGE_MS) await deleteCache(infoHash);
+    }
+  }
+
+  async function loadMagnet(magnetUri) {
     if (!magnetUri.trim().startsWith("magnet:")) {
       setSyncStatus("Not a valid magnet link");
       return;
@@ -697,7 +846,13 @@
       magnetButton.textContent = "Stream";
     });
 
-    torrentClient.add(injectWssTrackers(magnetUri.trim()), (torrent) => {
+    const infoHash = magnetInfoHash(magnetUri.trim());
+    activeInfoHash = infoHash;
+    if (infoHash) await purgeCachesExcept(infoHash); // new file: drop other torrents' caches
+    const storeFactory = await prepareChunkStore(infoHash);
+    const addOpts = storeFactory ? { store: storeFactory } : {};
+
+    torrentClient.add(injectWssTrackers(magnetUri.trim()), addOpts, (torrent) => {
       // Disable seeding: choke all peers so we never upload pieces.
       torrent.on("wire", (wire) => {
         wire.choke();
@@ -717,6 +872,7 @@
       }
 
       startTorrentPanel(torrent);
+      warnIfStorageShort(torrent);
 
       if (videoFiles.length === 1) {
         streamFile(videoFiles[0]);
@@ -855,6 +1011,10 @@
       torrentClient.destroy();
       torrentClient = null;
     }
+    if (activeInfoHash) {
+      deleteCache(activeInfoHash).catch(() => {});
+      activeInfoHash = null;
+    }
     stopTorrentPanel();
     history.replaceState(null, "", window.location.pathname);
     updateShareHref();
@@ -908,6 +1068,8 @@
       torrentClient.destroy();
       torrentClient = null;
     }
+    activeInfoHash = null;
+    purgeCachesExcept(null).catch(() => {}); // switching to a local file: drop all torrent caches
 
     stopTorrentPanel();
     history.replaceState(null, "", window.location.pathname);
@@ -1061,11 +1223,29 @@
     }
   });
 
+  // Guard against an accidental refresh/close while a torrent is loaded. Even
+  // with the persistent cache a reload interrupts playback and forces a
+  // re-verify, so prompt first. Browsers show their own generic confirmation.
+  window.addEventListener("beforeunload", (e) => {
+    if (torrentClient && torrentClient.torrents.length > 0) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+
+  let initialMagnet = null;
   if (window.location.hash) {
     const hashValue = decodeURIComponent(window.location.hash.slice(1));
     if (hashValue.startsWith("magnet:")) {
-      loadMagnet(hashValue);
+      initialMagnet = hashValue;
     }
+  }
+
+  // Evict caches unused for >3 days, but keep the one we're about to resume.
+  evictStaleCaches(initialMagnet ? magnetInfoHash(initialMagnet) : null).catch(() => {});
+
+  if (initialMagnet) {
+    loadMagnet(initialMagnet);
   }
 
   loadShareLink().catch(() => {});
