@@ -1048,11 +1048,17 @@
 
   magnetInput.addEventListener("input", () => {
     magnetClear.hidden = !magnetInput.value;
+    if (!magnetInput.value) {
+      magnetButton.disabled = false;
+      magnetButton.textContent = "Stream";
+    }
   });
 
   magnetClear.addEventListener("click", () => {
     magnetInput.value = "";
     magnetClear.hidden = true;
+    magnetButton.disabled = false;
+    magnetButton.textContent = "Stream";
     magnetInput.focus();
   });
 
