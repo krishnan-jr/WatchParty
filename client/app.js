@@ -671,9 +671,17 @@
   let chunkStoreModule = null;
   function loadChunkStore() {
     if (!chunkStoreModule) {
-      chunkStoreModule = import(
-        "https://cdn.jsdelivr.net/npm/idb-chunk-store@1.0.1/+esm"
-      ).then((m) => m.default);
+      // Use esm.sh, not jsdelivr's /+esm: jsdelivr's auto-bundle default-imports
+      // idb (which has no default export), leaving it null so the store throws
+      // "Cannot read property of null (reading 'openDB')" on construction.
+      chunkStoreModule = import("https://esm.sh/idb-chunk-store@1.0.1").then((m) => {
+        const Store = m.default;
+        // Construct once to surface any CDN/interop failure here — inside the
+        // prepareChunkStore try/catch — rather than later inside WebTorrent,
+        // where it would kill the torrent instead of falling back to memory.
+        new Store(16384, { name: "__wp_probe__" }).destroy(() => {});
+        return Store;
+      });
     }
     return chunkStoreModule;
   }
