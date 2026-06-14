@@ -372,7 +372,7 @@
   const WSS_TRACKERS = [
     "wss://tracker.btorrent.xyz",
     "wss://tracker.openwebtorrent.com",
-    "wss://tracker.fastcast.nz"
+    "wss://tracker.webtorrent.dev"
   ];
 
   function injectWssTrackers(magnetUri) {
